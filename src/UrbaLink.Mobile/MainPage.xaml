@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="UrbaLink.Mobile.MainPage"
+             BackgroundColor="#F4F7F6" Title="UrbaLink">
+    <ScrollView>
+        <VerticalStackLayout Padding="24,32" Spacing="20">
+            <Label Text="URBALINK" TextColor="#176B57" FontAttributes="Bold" FontSize="16" />
+            <Label Text="Tu comunidad, más cerca." TextColor="#16352C" FontSize="32" FontAttributes="Bold" />
+            <Label Text="Ayuda, comparte y conecta con quienes viven cerca de ti." TextColor="#52665F" FontSize="17" />
+            <Border Stroke="#DAE5DF" BackgroundColor="White" Padding="20" StrokeShape="RoundRectangle 18">
+                <VerticalStackLayout Spacing="14">
+                    <Label Text="Conexión" TextColor="#16352C" FontSize="21" FontAttributes="Bold" />
+                    <Label Text="Dirección del servidor" TextColor="#52665F" />
+                    <Entry x:Name="ServerEntry" Placeholder="http://192.168.1.50:5080" Keyboard="Url"
+                           TextColor="#16352C" PlaceholderColor="#667A71"
+                           AutomationId="ServerAddress" />
+                    <Label Text="En tu móvil: IP del ordenador. En el emulador Android: 10.0.2.2."
+                           TextColor="#52665F" FontSize="13" />
+                    <Button x:Name="ConnectButton" Text="Comprobar conexión" Clicked="OnConnectClicked"
+                            BackgroundColor="#176B57" TextColor="White" CornerRadius="12" />
+                    <ActivityIndicator x:Name="BusyIndicator" Color="#176B57" IsVisible="False" />
+                    <Label x:Name="StatusLabel" Text="Pendiente de comprobar." TextColor="#16352C"
+                           AutomationId="ConnectionStatus" />
+                </VerticalStackLayout>
+            </Border>
+            <Button x:Name="ContinueButton" Text="Entrar en UrbaLink" IsVisible="False"
+                    Clicked="OnContinueClicked" BackgroundColor="#176B57" TextColor="White" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

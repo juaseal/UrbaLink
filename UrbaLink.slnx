@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/UrbaLink.Api/UrbaLink.Api.csproj" />
+    <Project Path="src/UrbaLink.Contracts/UrbaLink.Contracts.csproj" />
+    <Project Path="src/UrbaLink.Mobile/UrbaLink.Mobile.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/UrbaLink.Checks/UrbaLink.Checks.csproj" />
+  </Folder>
+</Solution>
