@@ -1,8 +1,9 @@
-param([ValidateSet('posts', 'comments', 'lifecycle')][string]$Suite = 'posts')
+param([ValidateSet('posts', 'comments', 'lifecycle', 'market', 'rides', 'services')][string]$Suite = 'posts')
 # Requires PowerShell 7, Docker Desktop and the project's local PostgreSQL container.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $previousPath = $env:PATH
+$previousTestConnection = $env:URBALINK_TEST_CONNECTION
 $dbName = 'urbalink_posts_test_' + [Guid]::NewGuid().ToString('N')
 $created = $false
 $process = $null
@@ -16,7 +17,7 @@ try {
     if (!$line) { throw 'Falta POSTGRES_PASSWORD.' }
     $password = ($line -split '=',2)[1]
     $container = [string](& docker compose --env-file $envFile ps -q postgres)
-    $container = $container.Trim()
+    $container = ([string]$container).Trim()
     if ($LASTEXITCODE -ne 0 -or !$container) { throw 'Arranca PostgreSQL antes de ejecutar las pruebas.' }
     $artifacts = Join-Path $root '.artifacts/posts-tests'
     dotnet build src/UrbaLink.Api --artifacts-path $artifacts
@@ -59,14 +60,15 @@ try {
         }
         if (!$ready) { throw 'La API no quedó lista.' }
         if ($run -eq 0) {
+            if ($Suite -eq 'market') { $env:URBALINK_TEST_CONNECTION = $connection.ConnectionString }
             & dotnet $checks $url $Suite
             if ($LASTEXITCODE -ne 0) { throw 'Fallaron las pruebas del tablón.' }
-            $countBefore = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments)'
+            $countBefore = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM market_items) + (SELECT count(*) FROM market_bids) + (SELECT count(*) FROM market_messages)'
         } else {
-            $countAfter = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments)'
+            $countAfter = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM market_items) + (SELECT count(*) FROM market_bids) + (SELECT count(*) FROM market_messages)'
             if ($countBefore -ne $countAfter -or [int]$countAfter -lt 1) { throw 'Se perdieron publicaciones al reiniciar.' }
             $versions = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT count(*) FROM schema_versions'
-            if ([int]$versions -ne 4) { throw 'Migraciones inesperadas.' }
+            if ([int]$versions -ne 9) { throw 'Migraciones inesperadas.' }
             Write-Output 'OK: persistencia y migraciones idempotentes tras reiniciar.'
         }
         $process.Kill()
@@ -82,6 +84,7 @@ try {
     if ($created -and $dbName -match '^urbalink_posts_test_[a-f0-9]{32}$') {
         & docker exec $container psql -U urbalink -d postgres -c "DROP DATABASE $dbName" | Out-Null
     }
+    $env:URBALINK_TEST_CONNECTION = $previousTestConnection
     $env:PATH = $previousPath
     Pop-Location
 }

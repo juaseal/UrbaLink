@@ -27,15 +27,39 @@ internal static class MarketPhoto
         using var bitmap = Android.Graphics.BitmapFactory.DecodeByteArray(bytes, 0, bytes.Length,
             new Android.Graphics.BitmapFactory.Options { InSampleSize = sample });
         if (bitmap is null) throw new InvalidOperationException("No se pudo leer esta foto.");
+        using var exifStream = new MemoryStream(bytes);
+        using var exif = new AndroidX.ExifInterface.Media.ExifInterface(exifStream);
+        var orientation = exif.GetAttributeInt(AndroidX.ExifInterface.Media.ExifInterface.TagOrientation, 1);
+        using var matrix = new Android.Graphics.Matrix();
+        switch (orientation)
+        {
+            case 2: matrix.PostScale(-1,1); break;
+            case 3: matrix.PostRotate(180); break;
+            case 4: matrix.PostScale(1,-1); break;
+            case 5: matrix.PostRotate(90); matrix.PostScale(-1,1); break;
+            case 6: matrix.PostRotate(90); break;
+            case 7: matrix.PostRotate(270); matrix.PostScale(-1,1); break;
+            case 8: matrix.PostRotate(270); break;
+        }
         // Re-encoding strips EXIF metadata and keeps the authenticated catalog lightweight.
         for (var size = 640; size >= 160; size /= 2)
         {
             var ratio = Math.Min(1d, (double)size / Math.Max(bitmap.Width, bitmap.Height));
-            using var scaled = Android.Graphics.Bitmap.CreateScaledBitmap(bitmap,
+            var scaled = Android.Graphics.Bitmap.CreateScaledBitmap(bitmap,
                 Math.Max(1,(int)(bitmap.Width*ratio)),Math.Max(1,(int)(bitmap.Height*ratio)),true);
-            using var output = new MemoryStream();
-            scaled.Compress(Android.Graphics.Bitmap.CompressFormat.Jpeg!, 65, output);
-            if (output.Length <= MarketRules.MaxPhotoBytes) return output.ToArray();
+            var oriented = Android.Graphics.Bitmap.CreateBitmap(scaled,0,0,scaled.Width,scaled.Height,matrix,true)!;
+            try
+            {
+                using var output = new MemoryStream();
+                oriented.Compress(Android.Graphics.Bitmap.CompressFormat.Jpeg!, 65, output);
+                if (output.Length <= MarketRules.MaxPhotoBytes) return output.ToArray();
+            }
+            finally
+            {
+                // Android may return the original bitmap when no transform is needed.
+                if(oriented.Handle!=scaled.Handle) oriented.Dispose();
+                if(scaled.Handle!=bitmap.Handle) scaled.Dispose();
+            }
         }
         throw new InvalidOperationException("No se pudo reducir esta foto. Prueba con otra.");
 #else

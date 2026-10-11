@@ -8,6 +8,7 @@ public sealed class AccountPage : ContentPage
 {
     private readonly ApiClient api;
     private readonly string storageKey;
+    private readonly NotificationBell bell;
     private string? token { get => api.Token; set => api.Token = value; }
     private AccountDto? account;
     private readonly VerticalStackLayout body = new() { Spacing = 14 };
@@ -23,30 +24,36 @@ public sealed class AccountPage : ContentPage
         Title = "Mi comunidad";
         BackgroundColor = Color.FromArgb("#F4F7F6");
         api = new ApiClient(server);
+        bell=new NotificationBell(api,()=>Run(async()=>
+        {
+            if(account is not null)await Navigation.PushAsync(new NotificationsPage(api,account.Id,Expired));
+        })) {IsVisible=false};
         storageKey = "session_" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(server.AbsoluteUri)));
         Shell.SetNavBarIsVisible(this, false);
         var layout = new Grid
         {
-            RowDefinitions = new RowDefinitionCollection { new(GridLength.Star), new(GridLength.Auto) }
+            RowDefinitions = new RowDefinitionCollection { new(GridLength.Auto),new(GridLength.Star), new(GridLength.Auto) }
         };
         var scroll = new ScrollView
         {
             Content = new VerticalStackLayout
             {
                 Padding = new Thickness(22,24,22,20), Spacing = 18,
-                Children = { new Label { Text = "URBALINK", FontSize = 13, CharacterSpacing = 3, TextColor = Color.FromArgb("#176B57"), FontAttributes = FontAttributes.Bold },
-                    body, busy, status }
+                Children = { body, busy, status }
             }
         };
-        layout.Add(scroll);
-        layout.Add(tabs, 0, 1);
+        var header=new Grid {Padding=new Thickness(22,8),ColumnDefinitions=new ColumnDefinitionCollection {new(GridLength.Star),new(GridLength.Auto)}};
+        header.Add(new Label {Text="URBALINK",FontSize=13,CharacterSpacing=3,TextColor=Color.FromArgb("#176B57"),FontAttributes=FontAttributes.Bold,VerticalOptions=LayoutOptions.Center});
+        header.Add(bell,1,0);layout.Add(header);
+        layout.Add(scroll,0,1);
+        layout.Add(tabs, 0, 2);
         Content = layout;
     }
     protected override async void OnAppearing()
     {
         base.OnAppearing();
-        if (account is not null) return;
+        if (account is not null) {bell.Start();return;}
         await Run(async () =>
         {
             token = await SecureStorage.Default.GetAsync(storageKey);
@@ -58,6 +65,8 @@ public sealed class AccountPage : ContentPage
             else ShowLogin();
         });
     }
+
+    protected override void OnDisappearing(){bell.Stop();base.OnDisappearing();}
 
     private static Entry Input(string placeholder, bool password = false) => new()
     {
@@ -109,6 +118,7 @@ public sealed class AccountPage : ContentPage
     private void ShowLogin(bool register = false)
     {
         tabs.IsVisible = false;
+        bell.Stop();bell.IsVisible=false;
         body.Clear();
         body.Add(Text(register ? "Crea tu cuenta" : "Bienvenido a tu comunidad"));
         var name = Input("Tu nombre");
@@ -158,6 +168,7 @@ public sealed class AccountPage : ContentPage
     {
         tabs.Clear();
         tabs.IsVisible = true;
+        bell.IsVisible=true;bell.Start();
         var labels = new[] { "Inicio", "Explorar", "Perfil" };
         for (var i = 0; i < labels.Length; i++)
         {
@@ -263,7 +274,7 @@ public sealed class AccountPage : ContentPage
             RowDefinitions = new RowDefinitionCollection { new(GridLength.Auto),new(GridLength.Auto) }, ColumnSpacing = 12, RowSpacing = 12 };
         var choices = new[] {
             ("Una mano", "Pedir u ofrecer ayuda", "Ayuda", "#E4F1EA"),
-            ("Compartir cosas", $"{overview.SharedItems} publicaciones", "Material", "#F8EDDC"),
+            ("Objetos", $"{overview.SharedItems} objetos · venta, alquiler y pujas", "Material", "#F8EDDC"),
             ("Ir juntos", $"{overview.Routes} trayectos publicados", "Coche", "#E4EDF7"),
             ("Lo que ofrezco", "Talento entre vecinos", "Ofrezco", "#F1E8F3")
         };
@@ -273,7 +284,7 @@ public sealed class AccountPage : ContentPage
             var content=new VerticalStackLayout { Spacing=7 };
             content.Add(Heading(choice.Item1,18));
             content.Add(new Label { Text=choice.Item2, FontSize=12, TextColor=Color.FromArgb("#52665F") });
-            var open=Action("Explorar  →", () => OpenBoard(current,choice.Item3));
+            var open=Action("Explorar  →", () => choice.Item3 == "Material" ? Navigation.PushAsync(new MarketPage(api, current, account!.Id, Expired)) : choice.Item3 == "Coche" ? Navigation.PushAsync(new RidePage(api,current,account!.Id,Expired)) : OpenBoard(current,choice.Item3));
             open.BackgroundColor=Colors.Transparent;
             open.TextColor=Color.FromArgb("#174B3D");
             open.Padding=0;

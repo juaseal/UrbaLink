@@ -168,11 +168,12 @@ public sealed class BoardPage : ContentPage
 
     private Task OpenComposer()
     {
+        if(filter.SelectedItem?.ToString()=="Coche")return Navigation.PushAsync(new RidePage(api,community,userId,sessionExpired,true));
         var page = new ContentPage { Title = "Nueva publicación", BackgroundColor = BackgroundColor };
         var title = new Entry { Placeholder = "Título", MaxLength = 120, TextColor = Color.FromArgb("#16352C") };
         var message = new Editor { Placeholder = "¿Qué quieres compartir?", MaxLength = 4000, HeightRequest = 180, TextColor = Color.FromArgb("#16352C") };
         var category = new Picker { Title = "Categoría", TextColor = Color.FromArgb("#16352C") };
-        foreach (var value in PostCategories.All.Where(c => c != "Aviso oficial" || community.Role == "Admin")) category.Items.Add(value);
+        foreach (var value in PostCategories.All.Where(c => c != "Coche" && (c != "Aviso oficial" || community.Role == "Admin"))) category.Items.Add(value);
         category.SelectedIndex = Math.Max(0, category.Items.IndexOf(filter.SelectedItem?.ToString() ?? "General"));
         var feedback = Text("");
         var publish = new Button { Text = "Publicar", BackgroundColor = Color.FromArgb("#176B57"), TextColor = Colors.White };
@@ -227,7 +228,7 @@ public sealed class BoardPage : ContentPage
             Content = new VerticalStackLayout
             {
                 Padding = 24, Spacing = 18,
-                Children = { Text(community.Name, 22), category, title, message, publish, feedback }
+                Children = { Text(community.Name, 22), category, title, message, publish, feedback, MakeButton("Ofrecer un trayecto en coche", () => Navigation.PushAsync(new RidePage(api,community,userId,sessionExpired,true))) }
             }
         };
         return Navigation.PushAsync(page);

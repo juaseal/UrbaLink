@@ -33,7 +33,7 @@ internal static class LifecycleScenarios
         var comments = path+$"/posts/{post.Id}/comments";
         await Post<CommentDto>(member,comments,new CreateCommentRequest("Respuesta",Guid.NewGuid()));
         var overview = (await admin.GetFromJsonAsync<CommunityOverview>(path+"/overview"))!;
-        if (overview.MemberCount != 2 || overview.SharedItems != 1) throw new Exception("Resumen incorrecto");
+        if (overview.MemberCount != 2 || overview.SharedItems != 0) throw new Exception("Resumen incorrecto");
         await Expect(await member.PostAsJsonAsync(path+"/delete",new DeleteCommunityRequest("carambolo")),HttpStatusCode.Conflict);
         await Expect(await admin.PostAsJsonAsync(path+"/delete",new DeleteCommunityRequest("Carambolo")),HttpStatusCode.Conflict);
         await Expect(await admin.PostAsJsonAsync(path+"/delete",new DeleteCommunityRequest("carambolo")),HttpStatusCode.NoContent);

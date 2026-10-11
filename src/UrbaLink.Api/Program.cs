@@ -5,7 +5,8 @@ using Microsoft.AspNetCore.Authentication;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 64 * 1024);
+// Allows a 40 KB JPEG plus JSON escaping of the full object description.
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 128 * 1024);
 // Console logging works locally and in containers without Windows Event Log permissions.
 builder.Logging.ClearProviders();
 builder.Logging.AddSimpleConsole();
@@ -41,6 +42,7 @@ if (app.Services.GetService<NpgsqlDataSource>() is { } database)
     app.MapComments();
     app.MapCommunityManagement();
     app.MapMarket();
+    app.MapRides();
 }
 
 app.MapGet("/health/live", () => Results.Ok(

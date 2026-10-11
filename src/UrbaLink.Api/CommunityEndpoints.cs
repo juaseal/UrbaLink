@@ -75,7 +75,7 @@ public static class CommunityEndpoints
             SELECT c.name,m.role,
                 (SELECT count(*)::int FROM active_memberships WHERE community_id=c.id),
                 (SELECT count(*)::int FROM posts WHERE community_id=c.id AND deleted_at IS NULL),
-                (SELECT count(*)::int FROM posts WHERE community_id=c.id AND deleted_at IS NULL AND category='Material'),
+                (SELECT count(*)::int FROM market_items WHERE community_id=c.id AND state='Active' AND (mode<>'Auction' OR ends_at>clock_timestamp())),
                 (SELECT count(*)::int FROM posts WHERE community_id=c.id AND deleted_at IS NULL AND category='Coche')
             FROM communities c JOIN active_memberships m ON m.community_id=c.id
             WHERE c.id=$1 AND m.user_id=$2

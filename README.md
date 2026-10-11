@@ -20,8 +20,9 @@ El tablón permite publicar, filtrar por categoría y cargar mensajes anteriores
 Solo los administradores pueden publicar avisos oficiales. El autor y los
 administradores pueden retirar publicaciones; se conserva el registro en la base.
 
-Todavía no incluye fotos, chat privado, recuperación de contraseña, verificación
-del correo, moderación, aprobación manual ni administración de miembros.
+Objetos incluye foto y conversaciones privadas entre propietario e interesado.
+Quedan pendientes recuperación de contraseña, verificación del correo,
+moderación avanzada y administración de miembros.
 Esta versión permite a cualquier cuenta crear una comunidad; eso no verifica
 que represente oficialmente a una urbanización.
 
@@ -47,7 +48,7 @@ Para comprobar aislamiento, crea otra comunidad con la segunda cuenta.
 
 1. Reinicia la API: se aplicará la migración 002 sin borrar cuentas ni comunidades.
 2. Detén la depuración de Visual Studio y vuelve a ejecutar la app.
-3. Inicia sesión y pulsa **Abrir tablón** en una de tus comunidades.
+3. Inicia sesión y pulsa **Ver toda la actividad** en tu comunidad.
 4. Usa **Nueva publicación** para elegir categoría, título y mensaje.
 5. Entra con otro miembro y pulsa **Actualizar** para ver el mensaje.
 6. Prueba el filtro por categorías y **Ver publicaciones anteriores**.
@@ -55,8 +56,9 @@ Para comprobar aislamiento, crea otra comunidad con la segunda cuenta.
 
 El tablón carga 20 publicaciones por página, de más recientes a más antiguas.
 Las categorías son General, Ayuda, Ofrezco, Material, Coche y Aviso oficial.
-Material y Coche son categorías de publicaciones en esta versión; todavía no
-incluyen reservas de objetos ni coincidencias automáticas de trayectos.
+Material conserva las publicaciones antiguas. El catálogo Objetos es un módulo
+independiente; los trayectos siguen siendo publicaciones. No hay reservas de objetos
+ni coincidencias automáticas de trayectos.
 No hay actualización en tiempo real: usa Actualizar para ver nuevas publicaciones.
 
 Las pruebas automatizadas se ejecutan con PowerShell 7:
@@ -70,7 +72,7 @@ Compilan en .artifacts para evitar los archivos bloqueados por Visual Studio.
 
 ## Comentarios en publicaciones
 
-- En el tablón, pulsa **Ver comentarios / Responder**.
+- En el tablón, abre **⋮ → Ver comentarios / Responder**.
 - La pantalla muestra la publicación y las respuestas más recientes primero.
 - Escribe hasta 2000 caracteres y pulsa **Enviar comentario**.
 - **Ver comentarios anteriores** carga otras 20 respuestas.
@@ -239,7 +241,8 @@ La app exige conexión para confirmar el cierre de sesión en el servidor.
 La app recuerda el servidor y abre la sesión guardada al iniciar. La navegación principal
 se divide en Inicio, Explorar y Perfil. Inicio muestra la comunidad seleccionada,
 recuentos reales, accesos a ayuda, material y coche, avisos y actividad reciente.
-Los accesos siguen utilizando publicaciones; aún no hay inventario ni reservas.
+Objetos abre el catálogo de venta, alquiler y subastas. Ir juntos abre fichas de
+trayectos con horarios y condiciones; Ayuda sigue utilizando publicaciones. El alquiler se acuerda por conversación, sin reservas.
 
 En Perfil, los administradores pueden gestionar cada comunidad y enviarla a la
 papelera escribiendo su nombre exacto. La comunidad deja de estar disponible para
@@ -253,3 +256,83 @@ Pruebas de este ciclo con una base temporal aislada:
 
 Después de actualizar, reinicia la API y vuelve a ejecutar la app desde Visual Studio
 para cargar las nuevas pantallas y las reglas de acceso.
+
+
+## Objetos: venta, alquiler y subastas
+
+1. Reinicia la API para aplicar las migraciones 005 y 006 y ejecuta de nuevo la app.
+2. En **Inicio** o **Explorar**, entra en **Objetos → Explorar**.
+3. **Ofrecer un objeto** permite añadir una foto, título, descripción y modalidad:
+   - **Venta:** precio fijo en euros; el propietario puede marcarlo vendido en ⋮.
+   - **Alquiler / préstamo:** precio por hora, día o semana; 0 € indica préstamo gratuito.
+     El propietario marca disponible/alquilado en ⋮. Un objeto alquilado sigue visible
+     y admite interesados. Disponibilidad, duración, precio final y entrega se acuerdan
+     directamente: no hay calendario, reserva ni cobro automático.
+   - **Subasta:** precio de salida, incremento mínimo y cierre entre 5 minutos y 30 días.
+     No se puede pujar por un objeto propio, retirar pujas ni retirar una subasta que ya
+     tiene pujas. El cierre usa la hora del servidor; gana la puja más alta registrada.
+4. Toca una tarjeta para ver el objeto. **Hablar con el propietario** abre una conversación
+   privada; solo sus dos participantes pueden leerla y escribir, también tras vender o
+   retirar el objeto. Los administradores de la comunidad no tienen acceso a chats ajenos.
+5. **Mis objetos** reúne lo publicado. **Mis gestiones** conserva conversaciones y pujas,
+   incluidas las subastas cerradas. Tras el cierre, propietario y ganador pueden hablar
+   y el propietario puede confirmar la entrega. Esto no confirma ni ejecuta un pago.
+6. Usa **Actualizar** para ver pujas y mensajes nuevos. No hay notificaciones push ni
+   actualización en tiempo real en esta entrega.
+
+La foto es opcional: Android corrige la orientación, reduce a una miniatura JPEG de
+hasta 40 KB y elimina los metadatos. Las fotos se entregan con la API autenticada,
+no mediante enlaces públicos. Las conversaciones y el catálogo se paginan de 20 en 20.
+Los importes se guardan como céntimos enteros; el máximo admitido es 1.000.000 €.
+
+Pruebas en una base temporal, sin usar datos reales:
+
+    ./scripts/Test-Posts.ps1 -Suite market
+
+Comprueban fotos y precios, idempotencia de envíos, alquiler manual, privacidad
+(incluido el administrador), venta, filtros, paginación, pujas simultáneas,
+incremento mínimo, cierre durante una espera por bloqueo, ganador, persistencia
+tras reiniciar y bloqueo de acceso al archivar una comunidad.
+
+La migración 006 es aditiva. La tabla del prototipo de reservas se conserva por
+compatibilidad, pero ninguna pantalla ni ruta de la API nueva la utiliza.
+
+
+## Campana de mensajes sin leer
+
+La cabecera de Inicio, Explorar y Perfil muestra una campana con el total de mensajes
+sin leer de todas las comunidades activas de la cuenta. Se consulta cada 10 segundos
+mientras esa pantalla está visible. No cuenta los mensajes enviados por uno mismo.
+La campana abre una bandeja agrupada por conversación; tocar una tarjeta lleva al chat.
+Al cargar la conversación se confirma su lectura hasta el último mensaje mostrado,
+sin consumir mensajes que hayan llegado después. La lectura se conserva entre dispositivos.
+Los mensajes anteriores a esta actualización aparecen inicialmente como no leídos.
+
+La bandeja también se actualiza cada 10 segundos. No son notificaciones push de Android:
+con la app cerrada no hay sonido ni aviso del sistema. El chat mantiene el botón Actualizar.
+La migración 007 añade únicamente el estado de lectura, sin modificar mensajes existentes.
+
+
+## Trayectos en coche
+
+En **Inicio / Explorar → Ir juntos → Ofrecer un trayecto** se publican rutas semanales:
+
+- Origen, destino y punto de encuentro opcional.
+- Días de salida de ida (lunes a domingo) y hora local de salida.
+- Vuelta opcional, con su hora de salida y opción de volver al día siguiente.
+- De 1 a 8 plazas para pasajeros, sin contar al conductor.
+- Precio por asiento y sentido; 0 € es gratuito. No hay pagos ni reservas automáticos.
+- Posibilidad de desvío y detalles (por ejemplo, zonas o minutos de margen).
+- Observaciones para equipaje, mascotas, espera u otras condiciones.
+
+El listado permite filtrar por día de salida. El menú ⋮ abre los detalles y preguntas
+(visibles para los miembros de la comunidad) o retira el trayecto si eres su autor o
+administrador. Los trayectos también aparecen resumidos en la actividad vecinal.
+Las publicaciones antiguas de Coche se conservan y se pueden abrir desde el listado.
+Los horarios se interpretan como horas locales del recorrido; no se calculan rutas,
+duración, coincidencias, reservas ni plazas restantes automáticamente.
+
+La migración 008 añade los detalles estructurados sin cambiar publicaciones existentes.
+Validación aislada:
+
+    ./scripts/Test-Posts.ps1 -Suite rides

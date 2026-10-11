@@ -17,6 +17,7 @@ public sealed class MarketPage : ContentPage
     private string scope = "", mode = "";
     private long? detailId, next;
     private bool editing;
+    private readonly ScrollView scroll;
     private readonly List<ItemDto> items = [];
     private string Root => $"api/communities/{community.Id}/items";
     private static readonly CultureInfo Spanish = CultureInfo.GetCultureInfo("es-ES");
@@ -25,13 +26,36 @@ public sealed class MarketPage : ContentPage
     {
         this.api=api; this.community=community; this.userId=userId; this.expired=expired;
         Title="Objetos · "+community.Name; BackgroundColor=Color.FromArgb("#F4F7F6");
-        Content=new ScrollView { Content=new VerticalStackLayout { Padding=20, Spacing=12, Children={ busy,status,body } } };
+        status.IsVisible=false;
+        status.PropertyChanged+=(_,e)=>{if(e.PropertyName==nameof(status.Text))status.IsVisible=!string.IsNullOrEmpty(status.Text);};
+        SemanticProperties.SetHint(status,"Estado de la operación");
+        busy.SetBinding(IsVisibleProperty,new Binding(nameof(ActivityIndicator.IsRunning),source:busy));
+        var layout=new Grid {RowDefinitions=new RowDefinitionCollection {new(GridLength.Auto),new(GridLength.Star)}};
+        layout.Add(new VerticalStackLayout {Padding=new Thickness(20,4),Spacing=4,Children={busy,status}});
+        scroll=new ScrollView {Content=new VerticalStackLayout {Padding=20,Children={body}}};
+        layout.Add(scroll,0,1);Content=layout;
+        Shell.SetBackButtonBehavior(this,new BackButtonBehavior {Command=new Command(async()=>await GoBack())});
+        ToolbarItems.Add(new ToolbarItem {Text="Actualizar",Command=new Command(async()=>await Run(async()=>
+        {
+            if(editing) {status.Text="Termina o cancela el borrador antes de actualizar.";return;}
+            if(detailId is {} id) await ShowDetail(id);else await LoadCatalog(true);
+        }))});
     }
     protected override async void OnAppearing()
     {
         base.OnAppearing();
         if(!editing) await Run(()=>detailId is {} id?ShowDetail(id):LoadCatalog(true));
     }
+    protected override bool OnBackButtonPressed()
+    {
+        _=GoBack();return true;
+    }
+    private Task GoBack()=>Run(async()=>
+    {
+        if(editing && !await DisplayAlertAsync("Descartar borrador", "¿Quieres salir sin publicar este objeto?", "Descartar", "Seguir editando")) return;
+        if(editing || detailId is not null) await LoadCatalog(true);
+        else await Navigation.PopAsync();
+    });
     private static Label Label(string text,double size=15,bool bold=false) => new()
     { Text=text,FontSize=size,FontAttributes=bold?FontAttributes.Bold:FontAttributes.None,TextColor=Color.FromArgb("#16352C") };
     private static Border Card(View content,string background="#FFFFFF") => new()
@@ -46,19 +70,21 @@ public sealed class MarketPage : ContentPage
     private async Task Run(Func<Task> action)
     {
         if(busy.IsRunning) return;
-        busy.IsRunning=true; body.IsEnabled=false; status.Text="";
+        busy.IsRunning=true; body.IsEnabled=false; status.Text="";status.TextColor=Color.FromArgb("#8B3228");
         try { await action(); }
         catch(ApiException e) { if(e.Status==HttpStatusCode.Unauthorized) await expired(); else status.Text=e.Message; }
         catch(Exception e) when(e is HttpRequestException or TaskCanceledException) { status.Text="No se pudo confirmar la operación. Actualiza para comprobar su estado; los reintentos del mismo envío no se duplican."; }
         catch(JsonException) { status.Text="Respuesta inesperada del servidor."; }
         catch(InvalidOperationException e) { status.Text=e.Message; }
+        catch(Exception e) when(e is IOException or PermissionException or FeatureNotSupportedException)
+        {status.Text="No se pudo abrir la foto. Comprueba el acceso al archivo y prueba con otra imagen.";}
         finally { busy.IsRunning=false; body.IsEnabled=true; }
     }
     private static string Money(long cents) => (cents/100m).ToString("C",Spanish);
     private static string Period(string? value) => value switch { "Hour"=>"hora", "Week"=>"semana", _=>"día" };
     private static string Mode(string value) => value switch { "Sale"=>"VENTA", "Rent"=>"ALQUILER / PRÉSTAMO", _=>"SUBASTA" };
     private static string State(string value) => value switch
-    { "Active"=>"Disponible", "Reserved"=>"Reservado", "Ended"=>"Subasta cerrada", "Withdrawn"=>"Retirado", "Completed"=>"Completado", "Pending"=>"Pendiente", "Accepted"=>"Aceptada", "Rejected"=>"No aceptada", "Cancelled"=>"Cancelada", _=>value };
+    { "Active"=>"Disponible", "Ended"=>"Subasta cerrada", "Withdrawn"=>"Retirado", "Completed"=>"Completado", _=>value };
     private static string Price(ItemDto item) => item.Mode switch
     { "Rent"=>item.PriceCents==0?"Préstamo gratuito":$"{Money(item.PriceCents)} / {Period(item.Period)}",
       "Auction"=>$"{Money(item.HighestBidCents??item.PriceCents)} · {(item.BidCount==0?"salida":"puja actual")}", _=>Money(item.PriceCents) };
@@ -77,33 +103,45 @@ public sealed class MarketPage : ContentPage
     private static Entry Input(string hint,Keyboard? keyboard=null) => new()
     { Placeholder=hint,Keyboard=keyboard??Keyboard.Default,TextColor=Color.FromArgb("#16352C"),BackgroundColor=Colors.White };
 
-    private async Task LoadCatalog(bool reset)
+    private async Task LoadCatalog(bool reset,string? requestedScope=null,string? requestedMode=null)
     {
-        var page=await api.Send<ItemPage>(HttpMethod.Get,Root+$"?scope={Uri.EscapeDataString(scope)}".Replace("scope=",scope==""?"unused=":"scope=")+
-            (mode==""?"":"&mode="+mode)+(reset||next is null?"":"&before="+next));
+        var selectedScope=requestedScope??scope;
+        var selectedMode=requestedMode??mode;
+        var query=new List<string>();
+        if(selectedScope!="") query.Add("scope="+selectedScope);
+        if(selectedMode!="") query.Add("mode="+selectedMode);
+        if(!reset && next is not null) query.Add("before="+next);
+        var page=await api.Send<ItemPage>(HttpMethod.Get,Root+(query.Count==0?"":"?"+string.Join("&",query)));
+        scope=selectedScope;mode=selectedMode;
         if(reset) items.Clear();
         items.AddRange(page.Items); next=page.NextBefore; detailId=null; editing=false;
         RenderCatalog();
+        if(reset)await scroll.ScrollToAsync(0,0,false);
     }
     private void RenderCatalog()
     {
         body.Clear();
         body.Add(Label("Dale otra vida.",30,true));
         body.Add(Label("Compra, alquila o encuentra tu próxima oportunidad entre vecinos."));
-        body.Add(Button("＋  Ofrecer un objeto",()=>{ShowCreate();return Task.CompletedTask;}));
+        body.Add(Button("＋  Ofrecer un objeto",ShowCreate));
         var tabs=new Grid { ColumnDefinitions=new ColumnDefinitionCollection {new(GridLength.Star),new(GridLength.Star),new(GridLength.Star)},ColumnSpacing=5 };
         var sections=new[] {("Catálogo",""),("Mis objetos","Mine"),("Mis gestiones","Activity")};
         for(var n=0;n<sections.Length;n++)
         {
             var section=sections[n];
-            var button=Button(section.Item1,async()=>{scope=section.Item2;await LoadCatalog(true);},scope!=section.Item2);
+            var button=Button(section.Item1,()=>LoadCatalog(true,requestedScope:section.Item2),scope!=section.Item2);
             button.FontSize=12; button.Padding=new Thickness(4,8); tabs.Add(button,n,0);
         }
         body.Add(tabs);
         var modes=new Picker { Title="Modalidad",ItemsSource=new[]{"Todo","Venta","Alquiler / préstamo","Subasta"},SelectedIndex=mode switch {"Sale"=>1,"Rent"=>2,"Auction"=>3,_=>0},TextColor=Color.FromArgb("#16352C") };
-        modes.SelectedIndexChanged+=async(_,_)=>await Run(async()=>{mode=modes.SelectedIndex switch {1=>"Sale",2=>"Rent",3=>"Auction",_=>""};await LoadCatalog(true);});
+        modes.SelectedIndexChanged+=async(_,_)=>await Run(async()=>
+        {
+            var selected=modes.SelectedIndex switch {1=>"Sale",2=>"Rent",3=>"Auction",_=>""};
+            try {await LoadCatalog(true,requestedMode:selected);}
+            catch {modes.SelectedIndex=mode switch {"Sale"=>1,"Rent"=>2,"Auction"=>3,_=>0};throw;}
+        });
         body.Add(modes);
-        if(items.Count==0) body.Add(Card(Label(scope=="Mine"?"Aquí aparecerán los objetos que ofrezcas.":scope=="Activity"?"Aquí puedes seguir tus solicitudes y pujas, también después del cierre.":"El catálogo está por estrenar. ¿Tienes algo que ya no usas?"),"#E4F1EA"));
+        if(items.Count==0) body.Add(Card(Label(scope=="Mine"?"Aquí aparecerán los objetos que ofrezcas.":scope=="Activity"?"Aquí puedes seguir tus conversaciones y pujas, también después del cierre.":"El catálogo está por estrenar. ¿Tienes algo que ya no usas?"),"#E4F1EA"));
         var grid=new Grid { ColumnDefinitions=new ColumnDefinitionCollection {new(GridLength.Star),new(GridLength.Star)},ColumnSpacing=12,RowSpacing=12 };
         for(var n=0;n<items.Count;n++)
         {
@@ -112,7 +150,7 @@ public sealed class MarketPage : ContentPage
             var content=new VerticalStackLayout { Spacing=8 };
             content.Add(Photo(item.Photo,120)); content.Add(Label(Mode(item.Mode),10,true));
             content.Add(Label(item.Title,18,true)); content.Add(Label(Price(item),16,true));
-            content.Add(Label(item.State=="Active"&&item.EndsAt is {} end?$"Cierra {end.LocalDateTime:g}":State(item.State),12));
+            content.Add(Label(item.State=="Active"&&item.EndsAt is {} end?$"Cierra {end.LocalDateTime:g}":Availability(item),12));
             if(item.Leading && item.State=="Active") content.Add(Label("Tu puja va en cabeza",12,true));
             var card=Card(content); card.Padding=12;
             SemanticProperties.SetDescription(card,$"{item.Title}. {Price(item)}. Abrir objeto");
@@ -127,19 +165,38 @@ public sealed class MarketPage : ContentPage
     private async Task ShowDetail(long id)
     {
         var detail=await api.Send<ItemDetail>(HttpMethod.Get,$"{Root}/{id}");
+        var changedPage=detailId!=id || editing;
         var item=detail.Item; detailId=id; editing=false; body.Clear();
         body.Add(Button("← Catálogo",()=>LoadCatalog(true),true));
         body.Add(Photo(item.Photo,240));
         var header=new Grid { ColumnDefinitions=new ColumnDefinitionCollection {new(GridLength.Star),new(GridLength.Auto)} };
-        header.Add(Label(Mode(item.Mode)+" · "+State(item.State),12,true));
+        header.Add(Label(Mode(item.Mode)+" · "+Availability(item),12,true));
         if((item.OwnerId==userId || community.Role=="Admin") && item.State is not ("Withdrawn" or "Completed"))
         {
             var menu=CardActions.Menu("Opciones del objeto");
             menu.Clicked+=async(_,_)=>await Run(async()=>
             {
-                if(await DisplayActionSheetAsync(item.Title,"Cancelar","Retirar objeto")!="Retirar objeto") return;
-                if(!await DisplayAlertAsync("Retirar objeto","Dejará de aparecer en el catálogo. No se puede retirar si tiene pujas o reservas aceptadas.","Retirar","Cancelar")) return;
-                await api.Send<object>(HttpMethod.Post,$"{Root}/{id}/withdraw"); await ShowDetail(id);
+                var options=new List<string>();
+                if(item.OwnerId==userId && item.State=="Active")
+                {
+                    if(item.Mode=="Rent") options.Add(item.IsLent?"Marcar disponible":"Marcar alquilado");
+                    if(item.Mode=="Sale") options.Add("Marcar vendido");
+                }
+                var choice=await DisplayActionSheetAsync(item.Title,"Cancelar","Retirar objeto",options.ToArray());
+                if(choice=="Retirar objeto")
+                {
+                    if(!await DisplayAlertAsync("Retirar objeto","Dejará de aparecer en el catálogo. Una subasta con pujas no se puede retirar.","Retirar","Cancelar")) return;
+                    await api.Send<object>(HttpMethod.Post,$"{Root}/{id}/withdraw");
+                }
+                else if(choice is "Marcar disponible" or "Marcar alquilado")
+                    await api.Send<object>(HttpMethod.Post,$"{Root}/{id}/availability",new AvailabilityRequest(!item.IsLent));
+                else if(choice=="Marcar vendido")
+                {
+                    if(!await DisplayAlertAsync("Marcar vendido","El objeto saldrá del catálogo. Podrás seguir hablando con los interesados.","Marcar vendido","Cancelar")) return;
+                    await api.Send<object>(HttpMethod.Post,$"{Root}/{id}/complete");
+                }
+                else return;
+                await ShowDetail(id);
             }); header.Add(menu,1,0);
         }
         body.Add(header); body.Add(Label(item.Title,28,true)); body.Add(Label(Price(item),25,true));
@@ -159,20 +216,28 @@ public sealed class MarketPage : ContentPage
                     await api.Send<object>(HttpMethod.Post,$"{Root}/{id}/complete");await ShowDetail(id);
                 }));
         }
-        else
+        if(item.Mode=="Rent") body.Add(Label(item.IsLent
+            ?"Ahora está alquilado. Puedes escribir al propietario para acordar cuándo estará disponible."
+            :"Acuerda la duración, disponibilidad y entrega directamente con el propietario.",14));
+        if(item.OwnerId!=userId && (item.State=="Active" || item.WinnerId==userId))
+            body.Add(Button("Hablar con el propietario",()=>OpenConversation(item,null)));
+        if(item.OwnerId==userId && item.WinnerId is {} winner)
+            body.Add(Button("Hablar con el ganador",()=>OpenConversation(item,winner)));
+        if(detail.Conversations.Length>0)
         {
-            if(detail.Bookings.Length>0)
+            body.Add(Label("Conversaciones privadas",20,true));
+            foreach(var conversation in detail.Conversations)
             {
-                body.Add(Label("Fechas ya reservadas",18,true));
-                foreach(var slot in detail.Bookings) body.Add(Label($"{slot.StartsAt.LocalDateTime:g} → {slot.EndsAt.LocalDateTime:g}",13));
+                var content=new VerticalStackLayout {Spacing=5};
+                var name=item.OwnerId==userId?conversation.Name:item.OwnerName;
+                var open=Button(name+"  →",()=>Navigation.PushAsync(new MarketChatPage(api,community,item,conversation,userId,expired)),true);
+                content.Add(open);
+                var preview=Label(conversation.LastMessage??"Conversación iniciada",13);
+                preview.MaxLines=2;preview.LineBreakMode=LineBreakMode.TailTruncation;content.Add(preview);body.Add(Card(content));
             }
-            if(item.OwnerId!=userId && item.State=="Active")
-                body.Add(Button(item.Mode=="Rent"?"Solicitar fechas":"Solicitar compra",()=>{ShowRequest(item);return Task.CompletedTask;}));
-            body.Add(Label(item.OwnerId==userId?"Solicitudes recibidas":"Tus solicitudes",20,true));
-            if(detail.Requests.Length==0) body.Add(Label("Todavía no hay solicitudes."));
-            foreach(var request in detail.Requests) AddRequest(item,request);
         }
         body.Add(Button("Actualizar objeto",()=>ShowDetail(id),true));
+        if(changedPage)await scroll.ScrollToAsync(0,0,false);
     }
     private void AddBid(ItemDto item)
     {
@@ -186,72 +251,25 @@ public sealed class MarketPage : ContentPage
             if(!Cents(amount.Text,out var value) || value<minimum) {status.Text="Introduce una puja válida igual o superior al mínimo.";return;}
             if(!await DisplayAlertAsync("Confirmar puja",$"Vas a pujar {Money(value)} por «{item.Title}». Las pujas no se pueden retirar.","Pujar","Cancelar")) return;
             await api.Send<object>(HttpMethod.Post,$"{Root}/{item.Id}/bids",new BidRequest(key,value));
-            await ShowDetail(item.Id); status.Text="Puja registrada.";
+            await ShowDetail(item.Id); status.TextColor=Color.FromArgb("#176B57");status.Text="Puja registrada.";
         }));
     }
-    private void AddRequest(ItemDto item,MarketRequestDto request)
+    private static string Availability(ItemDto item) => item.State=="Active" && item.Mode=="Rent" && item.IsLent
+        ? "Alquilado · puedes consultar" : item.State=="Completed" && item.Mode=="Sale" ? "Vendido" : State(item.State);
+
+    private async Task OpenConversation(ItemDto item,Guid? interested)
     {
-        var content=new VerticalStackLayout {Spacing=8};
-        content.Add(Label($"{request.Name} · {State(request.State)}",16,true));
-        if(request.StartsAt is {} start) content.Add(Label($"{start.LocalDateTime:g} → {request.EndsAt!.Value.LocalDateTime:g}",13));
-        content.Add(Label(Money(request.TotalCents),19,true));
-        if(request.Note.Length>0) content.Add(Label(request.Note));
-        async Task Decide(string action)
-        {
-            var message=action=="Accept"?"¿Aceptar esta solicitud por "+Money(request.TotalCents)+"?":action=="Complete"?(item.Mode=="Rent"?"¿El objeto ya ha sido devuelto?":"¿Has entregado el objeto?"):"¿Confirmar esta acción?";
-            if(!await DisplayAlertAsync("Confirmar",message,"Confirmar","Volver")) return;
-            await api.Send<object>(HttpMethod.Post,$"{Root}/{item.Id}/requests/{request.Id}",new RequestDecision(action));
-            await ShowDetail(item.Id);
-        }
-        if(request.State=="Pending")
-        {
-            if(item.OwnerId==userId)
-            { content.Add(Button("Aceptar solicitud",()=>Decide("Accept")));content.Add(Button("Rechazar",()=>Decide("Reject"),true)); }
-            else content.Add(Button("Cancelar solicitud",()=>Decide("Cancel"),true));
-        }
-        if(request.State=="Accepted" && item.OwnerId==userId) content.Add(Button(item.Mode=="Rent"?"Confirmar devolución":"Confirmar entrega",()=>Decide("Complete")));
-        body.Add(Card(content));
+        var conversation=await api.Send<MarketConversationDto>(HttpMethod.Post,$"{Root}/{item.Id}/conversations",new StartMarketConversation(interested));
+        await Navigation.PushAsync(new MarketChatPage(api,community,item,conversation,userId,expired));
     }
-    private void ShowRequest(ItemDto item)
-    {
-        editing=true;body.Clear();body.Add(Label(item.Mode=="Rent"?"Elige tus fechas":"Solicitar compra",27,true));
-        body.Add(Label(item.Title,20,true));body.Add(Label(Price(item),18));
-        var from=new DatePicker { Date=DateTime.Today.AddDays(1),MinimumDate=DateTime.Today,MaximumDate=DateTime.Today.AddDays(365) };
-        var fromTime=new TimePicker { Time=TimeSpan.FromHours(10) };
-        var to=new DatePicker { Date=DateTime.Today.AddDays(2),MinimumDate=DateTime.Today,MaximumDate=DateTime.Today.AddDays(366) };
-        var toTime=new TimePicker { Time=TimeSpan.FromHours(10) };
-        DateTimeOffset Start()=>new(DateTime.SpecifyKind(from.Date!.Value.Date+fromTime.Time!.Value,DateTimeKind.Local));
-        DateTimeOffset End()=>new(DateTime.SpecifyKind(to.Date!.Value.Date+toTime.Time!.Value,DateTimeKind.Local));
-        var total=Label("",22,true);
-        void Estimate()
-        {
-            total.Text=End()>Start()?"Total estimado: "+Money(MarketRules.RentalTotal(item.PriceCents,item.Period!,Start(),End())):"La devolución debe ser posterior a la recogida.";
-        }
-        if(item.Mode=="Rent")
-        {
-            body.Add(Label("Recogida"));body.Add(from);body.Add(fromTime);body.Add(Label("Devolución"));body.Add(to);body.Add(toTime);
-            body.Add(Label($"Se cobra cada {Period(item.Period)} iniciada (24 h por día, 7 días por semana).",12));
-            from.DateSelected+=(_,_)=>Estimate();to.DateSelected+=(_,_)=>Estimate();fromTime.PropertyChanged+=(_,e)=>{if(e.PropertyName==nameof(TimePicker.Time))Estimate();};toTime.PropertyChanged+=(_,e)=>{if(e.PropertyName==nameof(TimePicker.Time))Estimate();};
-            Estimate();body.Add(total);
-        }
-        var note=new Editor { Placeholder="Mensaje al propietario: recogida, dudas…",MaxLength=1000,HeightRequest=110,TextColor=Color.FromArgb("#16352C") };
-        body.Add(note);var key=Guid.NewGuid();
-        body.Add(Label("El propietario debe aceptar la solicitud. No se cobra nada al enviarla.",13));
-        body.Add(Button("Enviar solicitud",async()=>
-        {
-            await api.Send<object>(HttpMethod.Post,$"{Root}/{item.Id}/requests",new ObjectRequest(key,item.Mode=="Rent"?Start().ToUniversalTime():null,item.Mode=="Rent"?End().ToUniversalTime():null,note.Text??""));
-            await ShowDetail(item.Id);status.Text="Solicitud enviada al propietario.";
-        }));
-        body.Add(Button("Volver al objeto",()=>ShowDetail(item.Id),true));
-    }
-    private void ShowCreate()
+    private async Task ShowCreate()
     {
         editing=true;body.Clear();body.Add(Label("Un objeto, otra oportunidad.",27,true));
         var title=Input("¿Qué ofreces?");title.MaxLength=120;
         var description=new Editor {Placeholder="Estado, características y condiciones de entrega",MaxLength=4000,HeightRequest=130,TextColor=Color.FromArgb("#16352C")};
-        var modePicker=new Picker {ItemsSource=new[]{"Venta","Alquiler / préstamo","Subasta"},SelectedIndex=0};
+        var modePicker=new Picker {TextColor=Color.FromArgb("#16352C"),ItemsSource=new[]{"Venta","Alquiler / préstamo","Subasta"},SelectedIndex=0};
         var price=Input("Precio en €",Keyboard.Numeric);
-        var period=new Picker {ItemsSource=new[]{"Hora","Día","Semana"},SelectedIndex=1};
+        var period=new Picker {TextColor=Color.FromArgb("#16352C"),ItemsSource=new[]{"Hora","Día","Semana"},SelectedIndex=1};
         var step=Input("Incremento mínimo en €",Keyboard.Numeric);step.Text="1";
         var closeDate=new DatePicker {Date=DateTime.Today.AddDays(3),MinimumDate=DateTime.Today,MaximumDate=DateTime.Today.AddDays(30)};
         var closeTime=new TimePicker {Time=TimeSpan.FromHours(20)};
@@ -264,8 +282,10 @@ public sealed class MarketPage : ContentPage
         modePicker.SelectedIndexChanged+=(_,_)=>{rental.IsVisible=modePicker.SelectedIndex==1;auction.IsVisible=modePicker.SelectedIndex==2;price.Placeholder=modePicker.SelectedIndex==2?"Precio de salida en €":"Precio en €";};
         body.Add(rental);body.Add(auction);body.Add(Label("El precio se publica en euros. Pago y entrega se acuerdan entre vecinos.",12));
         var key=Guid.NewGuid();
+        long? publishedId=null;
         body.Add(Button("Publicar objeto",async()=>
         {
+            if(publishedId is {} saved) {await ShowDetail(saved);return;}
             if(!Cents(price.Text,out var value)) {status.Text="Introduce un precio válido con hasta dos decimales.";return;}
             var bidStep=0;
             if(modePicker.SelectedIndex==2 && (!Cents(step.Text,out bidStep)||bidStep==0)) {status.Text="El incremento mínimo debe ser mayor que cero.";return;}
@@ -273,8 +293,11 @@ public sealed class MarketPage : ContentPage
             DateTimeOffset? close=selected=="Auction"?new DateTimeOffset(DateTime.SpecifyKind(closeDate.Date!.Value.Date+closeTime.Time!.Value,DateTimeKind.Local)).ToUniversalTime():null;
             var created=await api.Send<ItemDto>(HttpMethod.Post,Root,new CreateItemRequest(key,title.Text??"",description.Text??"",selected,value,
                 selected=="Rent"?period.SelectedIndex switch {0=>"Hour",2=>"Week",_=>"Day"}:null,close,bidStep,photo));
-            await ShowDetail(created.Id);status.Text="Tu objeto ya está publicado.";
+            publishedId=created.Id;
+            await ShowDetail(created.Id);status.TextColor=Color.FromArgb("#176B57");status.Text="Tu objeto ya está publicado.";
         }));
-        body.Add(Button("Cancelar",()=>LoadCatalog(true),true));
+        var cancel=new Button {Text="Cancelar",BackgroundColor=Colors.Transparent,TextColor=Color.FromArgb("#176B57")};
+        cancel.Clicked+=async(_,_)=>await GoBack();body.Add(cancel);
+        await scroll.ScrollToAsync(0,0,false);
     }
 }

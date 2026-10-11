@@ -14,7 +14,7 @@ public static class Database
             "CREATE TABLE IF NOT EXISTS schema_versions (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())",
             connection, transaction))
             await versions.ExecuteNonQueryAsync();
-        foreach (var (version, file) in new[] { (1, "001_accounts.sql"), (2, "002_posts.sql"), (3, "003_comments.sql"), (4, "004_community_trash.sql"), (5, "005_market.sql") })
+        foreach (var (version, file) in new[] { (1, "001_accounts.sql"), (2, "002_posts.sql"), (3, "003_comments.sql"), (4, "004_community_trash.sql"), (5, "005_market.sql"), (6, "006_market_conversations.sql"), (7, "007_message_reads.sql"), (8, "008_rides.sql"), (9, "009_private_services.sql") })
         {
             await using var check = new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM schema_versions WHERE version=$1)", connection, transaction);
             check.Parameters.Add(new NpgsqlParameter { Value = version });
