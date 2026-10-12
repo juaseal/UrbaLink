@@ -1,0 +1,14 @@
+# Only API source enters the build context. Never send local secrets or backups.
+**
+!global.json
+!src/
+!src/UrbaLink.Api/
+!src/UrbaLink.Api/**
+!src/UrbaLink.Contracts/
+!src/UrbaLink.Contracts/**
+**/bin/**
+**/obj/**
+**/*.user
+**/.env*
+**/appsettings.*.local.json
+src/UrbaLink.Api/Properties/**

@@ -4,7 +4,7 @@ using UrbaLink.Contracts;
 
 namespace UrbaLink.Mobile;
 
-public sealed class MarketChatPage : ContentPage
+public sealed class ConversationPage : ContentPage
 {
     private readonly ApiClient api;
     private readonly Guid userId;
@@ -24,15 +24,20 @@ public sealed class MarketChatPage : ContentPage
     private Guid requestId=Guid.NewGuid();
     private bool running;
 
-    public MarketChatPage(ApiClient api,CommunityDto community,ItemDto item,MarketConversationDto conversation,Guid userId,Func<Task> expired)
+    public ConversationPage(ApiClient api,CommunityDto community,ItemDto item,MarketConversationDto conversation,Guid userId,Func<Task> expired)
+        : this(api,$"api/communities/{community.Id}/items/{item.Id}/conversations/{conversation.Id}/messages",
+            item.OwnerId==userId?conversation.Name:item.OwnerName,item.Title,userId,expired) { }
+    public ConversationPage(ApiClient api,CommunityDto community,PostDto service,MarketConversationDto conversation,Guid userId,Func<Task> expired)
+        : this(api,$"api/communities/{community.Id}/services/{service.Id}/conversations/{conversation.Id}/messages",
+            service.AuthorId==userId?conversation.Name:service.AuthorName,service.Title,userId,expired) { }
+    private ConversationPage(ApiClient api,string path,string title,string subject,Guid userId,Func<Task> expired)
     {
-        this.api=api;this.userId=userId;this.expired=expired;
-        path=$"api/communities/{community.Id}/items/{item.Id}/conversations/{conversation.Id}/messages";
-        Title=item.OwnerId==userId?conversation.Name:item.OwnerName;
+        this.api=api;this.userId=userId;this.expired=expired;this.path=path;
+        Title=title;
         BackgroundColor=Color.FromArgb("#F4F7F6");
         var layout=new Grid { RowDefinitions=new RowDefinitionCollection {new(GridLength.Auto),new(GridLength.Star),new(GridLength.Auto)} };
         var header=new VerticalStackLayout {Padding=new Thickness(16,8),Spacing=4};
-        header.Add(new Label {Text=item.Title,FontSize=19,FontAttributes=FontAttributes.Bold,TextColor=Color.FromArgb("#16352C")});
+        header.Add(new Label {Text=subject,FontSize=19,FontAttributes=FontAttributes.Bold,TextColor=Color.FromArgb("#16352C")});
         header.Add(new Label {Text="Solo vosotros dos podéis leer esta conversación.",FontSize=12,TextColor=Color.FromArgb("#52665F")});
         header.Add(refresh);layout.Add(header);
         scroll=new ScrollView {Content=messages};layout.Add(scroll,0,1);
@@ -86,7 +91,7 @@ public sealed class MarketChatPage : ContentPage
                 BackgroundColor=Color.FromArgb(mine?"#E4F1EA":"#FFFFFF"),Stroke=Colors.Transparent,
                 StrokeShape=new Microsoft.Maui.Controls.Shapes.RoundRectangle {CornerRadius=16}});
         }
-        if(history.Count==0)messages.Add(new Label {Text="Pregunta por el objeto y acordad aquí los detalles.",TextColor=Color.FromArgb("#52665F")});
+        if(history.Count==0)messages.Add(new Label {Text="Escribe en privado y acordad aquí los detalles.",TextColor=Color.FromArgb("#52665F")});
         if(reset && page.Items.Length>0)
         {
             try {await api.Send<object>(HttpMethod.Post,path+"/read",new MessageReadRequest(page.Items.Max(m=>m.Id)));}

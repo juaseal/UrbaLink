@@ -23,6 +23,7 @@ public static class CommentEndpoints
     private static async Task<PostDto?> FindPost(NpgsqlConnection connection, Guid communityId,
         long postId, Guid userId, CancellationToken ct)
     {
+        if (await CommunityAccess.Role(connection, communityId, userId, ct) is null) return null;
         await using var command = Database.Command(connection,
             """
             SELECT p.id,p.community_id,p.author_id,u.name,p.title,p.body,p.category,p.created_at
@@ -32,10 +33,7 @@ public static class CommentEndpoints
             FOR SHARE OF p
             """, communityId, postId, userId);
         await using var reader = await command.ExecuteReaderAsync(ct);
-        return await reader.ReadAsync(ct) ? new PostDto(
-            reader.GetInt64(0), reader.GetGuid(1), reader.GetGuid(2), reader.GetString(3),
-            reader.GetString(4), reader.GetString(5), reader.GetString(6),
-            new DateTimeOffset(reader.GetDateTime(7))) : null;
+        return await reader.ReadAsync(ct) ? PostRecord.Read(reader) : null;
     }
 
     private static CommentDto Read(NpgsqlDataReader reader) => new(

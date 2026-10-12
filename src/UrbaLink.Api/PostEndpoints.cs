@@ -18,37 +18,26 @@ public static class PostEndpoints
         routes.MapDelete("/{postId:long}", Delete);
     }
 
-    private static async Task<string?> Role(NpgsqlConnection connection, Guid communityId, Guid userId, CancellationToken ct)
-    {
-        await using var command = Database.Command(connection,
-            "SELECT role FROM active_memberships WHERE community_id=$1 AND user_id=$2", communityId, userId);
-        return await command.ExecuteScalarAsync(ct) as string;
-    }
-
-    private static PostDto Read(NpgsqlDataReader reader) => new(
-        reader.GetInt64(0), reader.GetGuid(1), reader.GetGuid(2), reader.GetString(3),
-        reader.GetString(4), reader.GetString(5), reader.GetString(6),
-        new DateTimeOffset(reader.GetDateTime(7)));
-
     private static async Task<IResult> List(Guid communityId, string? category, long? before,
         ClaimsPrincipal principal, NpgsqlDataSource source, CancellationToken ct)
     {
-        if ((category is not null && !PostCategories.All.Contains(category)) || before is <= 0)
+        if ((category is not null && !PostCategories.All.Contains(category) && category != PostCategories.HelpGroup) || before is <= 0)
             return Error("Filtro de publicaciones inválido.", 400);
         await using var connection = await source.OpenConnectionAsync(ct);
-        if (await Role(connection, communityId, Tokens.UserId(principal), ct) is null)
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        if (await CommunityAccess.Role(connection, communityId, Tokens.UserId(principal), ct) is null)
             return Error("No tienes acceso a esta comunidad.", 403);
         await using var command = Database.Command(connection,
             """
             SELECT p.id,p.community_id,p.author_id,u.name,p.title,p.body,p.category,p.created_at
             FROM posts p JOIN users u ON u.id=p.author_id
             WHERE p.community_id=$1 AND p.deleted_at IS NULL
-                AND ($2='' OR p.category=$2) AND p.id < $3
+                AND ($2='' OR p.category=$2 OR ($2='Ayuda y servicios' AND p.category IN ('Ayuda','Ofrezco','Recomendación'))) AND p.id < $3
             ORDER BY p.id DESC LIMIT 21
             """, communityId, category ?? "", before ?? long.MaxValue);
         var posts = new List<PostDto>();
         await using var reader = await command.ExecuteReaderAsync(ct);
-        while (await reader.ReadAsync(ct)) posts.Add(Read(reader));
+        while (await reader.ReadAsync(ct)) posts.Add(PostRecord.Read(reader));
         var hasMore = posts.Count > 20;
         if (hasMore) posts.RemoveAt(20);
         return Results.Ok(new PostPage(posts.ToArray(), hasMore ? posts[^1].Id : null));
@@ -64,7 +53,10 @@ public static class PostEndpoints
             return Error("Escribe un título de 3–120 caracteres, un mensaje de 1–4000 y una categoría válida.", 400);
         var userId = Tokens.UserId(principal);
         await using var connection = await source.OpenConnectionAsync(ct);
-        // Keep authorization and insertion in the same statement.
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        if (await CommunityAccess.Role(connection, communityId, userId, ct) is null)
+            return Error("No tienes acceso a esta comunidad.", 403);
+        // Keep permission checks in the insert as well as the transaction-scoped community gate.
         await using var command = Database.Command(connection,
             """
             WITH created AS (
@@ -76,9 +68,11 @@ public static class PostEndpoints
             SELECT p.id,p.community_id,p.author_id,u.name,p.title,p.body,p.category,p.created_at
             FROM created p JOIN users u ON u.id=p.author_id
             """, communityId, userId, title, body, request.Category);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-        return await reader.ReadAsync(ct)
-            ? Results.Ok(Read(reader))
+        PostDto? post;
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+            post = await reader.ReadAsync(ct) ? PostRecord.Read(reader) : null;
+        await transaction.CommitAsync(ct);
+        return post is not null ? Results.Ok(post)
             : Error("No tienes permiso para publicar aquí. Los avisos oficiales requieren ser administrador.", 403);
     }
 
@@ -87,7 +81,8 @@ public static class PostEndpoints
     {
         var userId = Tokens.UserId(principal);
         await using var connection = await source.OpenConnectionAsync(ct);
-        if (await Role(connection, communityId, userId, ct) is null)
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        if (await CommunityAccess.Role(connection, communityId, userId, ct) is null)
             return Error("No tienes acceso a esta comunidad.", 403);
         await using var command = Database.Command(connection,
             """
@@ -97,7 +92,9 @@ public static class PostEndpoints
                 AND m.community_id=p.community_id AND m.user_id=$3
                 AND (p.author_id=$3 OR m.role='Admin')
             """, postId, communityId, userId);
-        return await command.ExecuteNonQueryAsync(ct) == 1
+        var affected = await command.ExecuteNonQueryAsync(ct);
+        await transaction.CommitAsync(ct);
+        return affected == 1
             ? Results.NoContent()
             : Error("Publicación no disponible o sin permiso para retirarla.", 404);
     }

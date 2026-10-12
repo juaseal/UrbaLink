@@ -56,17 +56,34 @@ public sealed class AccountPage : ContentPage
         if (account is not null) {bell.Start();return;}
         await Run(async () =>
         {
-            token = await SecureStorage.Default.GetAsync(storageKey);
+            try { token = await SecureStorage.Default.GetAsync(storageKey); }
+            catch
+            {
+                ClearSession();
+                ShowLogin();
+                status.Text = "No se pudo leer el acceso guardado en este teléfono. Inicia sesión de nuevo.";
+                return;
+            }
             if (token is not null)
             {
-                account = await Send<AccountDto>(HttpMethod.Get, "api/me");
-                await ShowCommunities();
+                body.Clear();
+                tabs.IsVisible = false;
+                body.Add(Heading("Tu acceso está guardado"));
+                body.Add(Text("Conectando con tu comunidad…"));
+                body.Add(Action("Reintentar conexión", RestoreSession));
+                await RestoreSession();
             }
             else ShowLogin();
         });
     }
 
     protected override void OnDisappearing(){bell.Stop();base.OnDisappearing();}
+
+    private async Task RestoreSession()
+    {
+        account = await Send<AccountDto>(HttpMethod.Get, "api/me");
+        await ShowCommunities();
+    }
 
     private static Entry Input(string placeholder, bool password = false) => new()
     {
@@ -128,6 +145,8 @@ public sealed class AccountPage : ContentPage
         if (register) body.Add(name);
         body.Add(email);
         body.Add(password);
+        body.Add(new Label { Text = "Mantendremos tu sesión en este teléfono para que no tengas que escribir la contraseña cada vez.",
+            FontSize = 13, TextColor = Color.FromArgb("#52665F") });
         body.Add(Action(register ? "Crear cuenta" : "Iniciar sesión", async () =>
         {
             if (string.IsNullOrWhiteSpace(email.Text) || string.IsNullOrEmpty(password.Text) ||
@@ -140,10 +159,10 @@ public sealed class AccountPage : ContentPage
                 ? await Send<SessionDto>(HttpMethod.Post, "api/auth/register",
                     new RegisterRequest(name.Text, email.Text, password.Text))
                 : await Send<SessionDto>(HttpMethod.Post, "api/auth/login", new LoginRequest(email.Text, password.Text));
+            password.Text = "";
+            await SecureStorage.Default.SetAsync(storageKey, session.Token);
             token = session.Token;
             account = session.Account;
-            password.Text = "";
-            await SecureStorage.Default.SetAsync(storageKey, token);
             await ShowCommunities();
         }));
         body.Add(Action(register ? "Ya tengo cuenta" : "Quiero registrarme", () =>
@@ -258,10 +277,10 @@ public sealed class AccountPage : ContentPage
         foreach (var post in overview.Recent)
         {
             var content = new VerticalStackLayout { Spacing = 8 };
-            content.Add(new Label { Text = $"{post.Category.ToUpperInvariant()}  ·  {post.AuthorName}", FontSize = 11, TextColor = Color.FromArgb("#688075") });
+            content.Add(new Label { Text = $"{PostCategories.Label(post.Category).ToUpperInvariant()}  ·  {post.AuthorName}", FontSize = 11, TextColor = Color.FromArgb("#688075") });
             content.Add(Heading(post.Title, 19));
             content.Add(new Label { Text = post.Body, MaxLines = 2, LineBreakMode = LineBreakMode.TailTruncation, TextColor = Color.FromArgb("#52665F") });
-            content.Add(Action("Ver conversación  →", () => Navigation.PushAsync(new CommentsPage(api,current,post.Id,account.Id,Expired))));
+            content.Add(Action(post.Category == "Ofrezco" ? "Ver servicio · Contacto privado  →" : "Ver conversación  →", () => Navigation.PushAsync(post.Category == "Ofrezco" ? new ServicePage(api,current,post.Id,account.Id,Expired) : new CommentsPage(api,current,post.Id,account.Id,Expired))));
             body.Add(Card(content));
         }
         body.Add(Action("Ver toda la actividad", () => OpenBoard(current)));
@@ -273,10 +292,9 @@ public sealed class AccountPage : ContentPage
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitionCollection { new(GridLength.Star),new(GridLength.Star) },
             RowDefinitions = new RowDefinitionCollection { new(GridLength.Auto),new(GridLength.Auto) }, ColumnSpacing = 12, RowSpacing = 12 };
         var choices = new[] {
-            ("Una mano", "Pedir u ofrecer ayuda", "Ayuda", "#E4F1EA"),
+            ("Ayuda y servicios", "Solicitudes, servicios y recomendaciones", PostCategories.HelpGroup, "#E4F1EA"),
             ("Objetos", $"{overview.SharedItems} objetos · venta, alquiler y pujas", "Material", "#F8EDDC"),
-            ("Ir juntos", $"{overview.Routes} trayectos publicados", "Coche", "#E4EDF7"),
-            ("Lo que ofrezco", "Talento entre vecinos", "Ofrezco", "#F1E8F3")
+            ("Ir juntos", $"{overview.Routes} trayectos publicados", "Coche", "#E4EDF7")
         };
         for (var i=0; i<choices.Length; i++)
         {
@@ -315,6 +333,7 @@ public sealed class AccountPage : ContentPage
         body.Add(Action("Crear comunidad", () => { ShowCreate(); return Task.CompletedTask; }));
         body.Add(Action("Papelera de comunidades", ShowTrash));
         body.Add(Action("Cerrar sesión", async () => {
+            if (!await DisplayAlertAsync("Cerrar sesión", "Para volver a entrar necesitarás tu contraseña. ¿Quieres cerrar sesión en este teléfono?", "Cerrar sesión", "Cancelar")) return;
             await Send<object>(HttpMethod.Post,"api/auth/logout");
             ClearSession(); ShowLogin();
         }));

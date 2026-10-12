@@ -1,4 +1,4 @@
-param([ValidateSet('posts', 'comments', 'lifecycle', 'market', 'rides', 'services')][string]$Suite = 'posts')
+param([ValidateSet('posts', 'comments', 'lifecycle', 'market', 'rides', 'services', 'architecture', 'accounts')][string]$Suite = 'posts')
 # Requires PowerShell 7, Docker Desktop and the project's local PostgreSQL container.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -47,7 +47,18 @@ try {
     $start.Environment['ASPNETCORE_URLS'] = $url
     $start.Environment['ConnectionStrings__UrbaLink'] = $connection.ConnectionString
     $start.Environment['Logging__LogLevel__Default'] = 'Warning'
+    $start.Environment['Availability__MaxConcurrentRequests'] = if ($Suite -eq 'architecture') { '4' } else { '64' }
     $checks = Join-Path $artifacts 'bin/UrbaLink.Checks/debug/UrbaLink.Checks.dll'
+    if ($Suite -eq 'architecture') {
+        $start.ArgumentList.Add('--Database:MigrateOnly=true')
+        $migrationProcess = [System.Diagnostics.Process]::Start($start)
+        try {
+            if (!$migrationProcess.WaitForExit(30000)) { $migrationProcess.Kill(); throw 'La migración independiente no terminó.' }
+            if ($migrationProcess.ExitCode -ne 0) { throw 'Falló la migración independiente.' }
+        } finally { $migrationProcess.Dispose() }
+        $start.ArgumentList.RemoveAt(1)
+        $start.Environment['Database__MigrateOnStartup'] = 'false'
+    }
     for ($run = 0; $run -lt 2; $run++) {
         $process = [System.Diagnostics.Process]::Start($start)
         $ready = $false
@@ -60,15 +71,15 @@ try {
         }
         if (!$ready) { throw 'La API no quedó lista.' }
         if ($run -eq 0) {
-            if ($Suite -eq 'market') { $env:URBALINK_TEST_CONNECTION = $connection.ConnectionString }
+            if ($Suite -in @('market', 'architecture', 'accounts')) { $env:URBALINK_TEST_CONNECTION = $connection.ConnectionString }
             & dotnet $checks $url $Suite
             if ($LASTEXITCODE -ne 0) { throw 'Fallaron las pruebas del tablón.' }
-            $countBefore = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM market_items) + (SELECT count(*) FROM market_bids) + (SELECT count(*) FROM market_messages)'
+            $countBefore = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM users) + (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM market_items) + (SELECT count(*) FROM market_bids) + (SELECT count(*) FROM market_messages)'
         } else {
-            $countAfter = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM market_items) + (SELECT count(*) FROM market_bids) + (SELECT count(*) FROM market_messages)'
+            $countAfter = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM users) + (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM market_items) + (SELECT count(*) FROM market_bids) + (SELECT count(*) FROM market_messages)'
             if ($countBefore -ne $countAfter -or [int]$countAfter -lt 1) { throw 'Se perdieron publicaciones al reiniciar.' }
             $versions = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT count(*) FROM schema_versions'
-            if ([int]$versions -ne 9) { throw 'Migraciones inesperadas.' }
+            if ([int]$versions -ne @(Get-ChildItem (Join-Path $root 'src/UrbaLink.Api/Data') -Filter '*.sql').Count) { throw 'Migraciones inesperadas.' }
             Write-Output 'OK: persistencia y migraciones idempotentes tras reiniciar.'
         }
         $process.Kill()

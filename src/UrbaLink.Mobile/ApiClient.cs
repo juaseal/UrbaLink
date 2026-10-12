@@ -13,15 +13,15 @@ public sealed class ApiException(HttpStatusCode status, string message) : Except
 
 public sealed class ApiClient(Uri server)
 {
-    private readonly HttpClient client = new() { BaseAddress = server, Timeout = TimeSpan.FromSeconds(15) };
+    private static readonly HttpClient client = new() { Timeout = TimeSpan.FromSeconds(15) };
     public string? Token { get; set; }
 
-    public async Task<T> Send<T>(HttpMethod method, string path, object? data = null)
+    public async Task<T> Send<T>(HttpMethod method, string path, object? data = null, CancellationToken cancellationToken = default)
     {
-        using var request = new HttpRequestMessage(method, path);
+        using var request = new HttpRequestMessage(method, new Uri(server, path));
         if (Token is not null) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
         if (data is not null) request.Content = JsonContent.Create(data);
-        using var response = await client.SendAsync(request);
+        using var response = await client.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             var message = response.StatusCode switch
@@ -31,11 +31,11 @@ public sealed class ApiClient(Uri server)
                 HttpStatusCode.Forbidden => "No tienes permiso para realizar esta acción.",
                 _ => "No se pudo completar la operación."
             };
-            try { message = (await response.Content.ReadFromJsonAsync<ApiError>())?.Message ?? message; }
+            try { message = (await response.Content.ReadFromJsonAsync<ApiError>(cancellationToken: cancellationToken))?.Message ?? message; }
             catch (JsonException) { }
             throw new ApiException(response.StatusCode, message);
         }
         if (response.StatusCode == HttpStatusCode.NoContent) return default!;
-        return (await response.Content.ReadFromJsonAsync<T>()) ?? throw new JsonException();
+        return (await response.Content.ReadFromJsonAsync<T>(cancellationToken: cancellationToken)) ?? throw new JsonException();
     }
 }

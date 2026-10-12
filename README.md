@@ -3,12 +3,19 @@
 Aplicación vecinal para comunidades privadas. Base inicial en C# y .NET 10:
 .NET MAUI para Android, API ASP.NET Core y PostgreSQL.
 
+La distribución de módulos, los invariantes de concurrencia, la configuración
+de disponibilidad y los límites pendientes se describen en [ARCHITECTURE.md](ARCHITECTURE.md).
+El despliegue del piloto con API y PostgreSQL en Railway se describe en [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## Qué funciona en esta entrega
 
 - Conexión de la app Android con la API y PostgreSQL.
 - Registro con nombre, correo y contraseña; inicio y cierre de sesión.
-- Sesiones de siete días, revocables al cerrar sesión, guardadas en SecureStorage
-  del dispositivo y asociadas a la dirección exacta del servidor.
+- Sesiones persistentes de 180 días, renovadas con el uso como máximo una vez al
+  día en condiciones normales. Se guarda solo el token en SecureStorage, nunca
+  la contraseña. Cerrar sesión revoca el acceso de ese dispositivo.
+- Al abrir la app se recupera el acceso guardado para la misma dirección del
+  servidor. Un fallo de red conserva la sesión y permite reintentar la conexión.
 - Creación de comunidades: el creador queda como administrador.
 - Lista de comunidades limitada al usuario autenticado.
 - Invitaciones de un solo uso, válidas siete días y generadas solo por administradores.
@@ -55,7 +62,9 @@ Para comprobar aislamiento, crea otra comunidad con la segunda cuenta.
 7. El autor o un administrador pueden **Retirar publicación**, previa confirmación.
 
 El tablón carga 20 publicaciones por página, de más recientes a más antiguas.
-Las categorías son General, Ayuda, Ofrezco, Material, Coche y Aviso oficial.
+Las categorías visibles son General, Necesito ayuda, Servicios, Recomendaciones,
+Material, Coche y Aviso oficial. Ayuda y servicios reúne solicitudes, ofertas y
+recomendaciones con filtros; los servicios tienen contacto privado.
 Material conserva las publicaciones antiguas. El catálogo Objetos es un módulo
 independiente; los trayectos siguen siendo publicaciones. No hay reservas de objetos
 ni coincidencias automáticas de trayectos.
@@ -336,3 +345,43 @@ La migración 008 añade los detalles estructurados sin cambiar publicaciones ex
 Validación aislada:
 
     ./scripts/Test-Posts.ps1 -Suite rides
+
+## Ayuda y servicios
+
+Inicio y Explorar reúnen las antiguas secciones de ayuda y talento en **Ayuda y servicios**.
+El filtro Todas incluye únicamente Necesito ayuda, Servicios y Recomendaciones.
+Los filtros aparecen como botones visibles y se adaptan al ancho de la pantalla.
+Tocar el título o el resumen de una tarjeta abre su detalle; el menú ⋮ conserva
+las acciones disponibles. Las vistas previas se limitan a tres líneas y el texto
+completo se puede leer en el detalle. Actualizar está en la barra superior.
+Al publicar, el listado muestra la categoría elegida para localizar la publicación.
+
+- **Necesito ayuda:** solicitudes, tanto gratuitas como remuneradas (buscar clases o una gestoría).
+- **Servicios:** ofertas propias de clases, oficios o negocios. Cada interesado abre una
+  conversación privada con quien publica. Solo los dos participantes pueden leerla;
+  ser administrador no permite acceder a conversaciones ajenas.
+- **Recomendaciones:** experiencias con terceros, por ejemplo recomendar un fontanero.
+  Las solicitudes y recomendaciones conservan comentarios visibles para la comunidad.
+
+El formulario explica la visibilidad antes de publicar. Los mensajes privados de servicios
+aparecen en la campana y permiten responder desde ella. Al retirar un servicio se ocultan
+su ficha, sus conversaciones y sus notificaciones, conservándose los datos en la base.
+
+La migración 009 incorpora conversaciones de servicios; la 010 permite recomendaciones.
+Las publicaciones existentes mantienen su categoría. Los antiguos comentarios públicos
+de ofertas se conservan en la base, pero dejan de exponerse por la API; no se convierten
+automáticamente en conversaciones privadas ni se reasignan a participantes.
+
+Pruebas de filtros, privacidad, notificaciones, reintentos y persistencia:
+
+    ./scripts/Test-Posts.ps1 -Suite services
+
+### Si el emulador sigue mostrando una versión antigua
+
+Una instalación manual del APK de depuración puede seguir cargando ensamblados
+antiguos desplegados por Visual Studio mediante Fast Deployment. Detén la depuración
+y vuelve a compilar y desplegar desde Visual Studio. Para una instalación manual,
+genera un APK completo con `-p:EmbedAssembliesIntoApk=true`; comprueba también que
+no quedan ensamblados antiguos en `files/.__override__` del almacenamiento privado
+de la app. No borres los datos de la aplicación para resolverlo: perderías su sesión
+y preferencias. En la revisión local se apartó esa carpeta como `files/qa-override-backup`.

@@ -2,9 +2,10 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 Push-Location $root
 try {
-    dotnet build src/UrbaLink.Api
+    $artifacts = Join-Path $root '.artifacts/availability-tests'
+    dotnet build src/UrbaLink.Api --artifacts-path $artifacts
     if ($LASTEXITCODE -ne 0) { throw 'No se pudo compilar la API.' }
-    dotnet build tests/UrbaLink.Checks
+    dotnet build tests/UrbaLink.Checks --artifacts-path $artifacts
     if ($LASTEXITCODE -ne 0) { throw 'No se pudieron compilar las comprobaciones.' }
 
     foreach ($scenario in @('database_not_configured', 'database_unavailable')) {
@@ -14,7 +15,7 @@ try {
         $listener.Stop()
         $url = "http://127.0.0.1:$port"
         $start = [System.Diagnostics.ProcessStartInfo]::new('dotnet')
-        $start.ArgumentList.Add((Join-Path $root 'src/UrbaLink.Api/bin/Debug/net10.0/UrbaLink.Api.dll'))
+        $start.ArgumentList.Add((Join-Path $artifacts 'bin/UrbaLink.Api/debug/UrbaLink.Api.dll'))
         $start.UseShellExecute = $false
         $start.CreateNoWindow = $true
         $start.WorkingDirectory = Join-Path $root 'src/UrbaLink.Api'
@@ -38,7 +39,7 @@ try {
                 } catch { Start-Sleep -Milliseconds 250 }
             }
             if (!$started) { throw 'La API no arrancó a tiempo.' }
-            dotnet tests/UrbaLink.Checks/bin/Debug/net10.0/UrbaLink.Checks.dll $url $scenario
+            dotnet (Join-Path $artifacts 'bin/UrbaLink.Checks/debug/UrbaLink.Checks.dll') $url $scenario
             if ($LASTEXITCODE -ne 0) { throw "Falló $scenario" }
         } finally {
             if (!$process.HasExited) {

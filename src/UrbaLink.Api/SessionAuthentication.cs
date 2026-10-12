@@ -28,10 +28,30 @@ public sealed class SessionAuthentication(
         var source = services.GetService<NpgsqlDataSource>();
         if (source is null) return AuthenticateResult.Fail("Base de datos no disponible.");
         await using var connection = await source.OpenConnectionAsync(Context.RequestAborted);
+        var tokenHash = Tokens.Hash(token);
         await using var command = Database.Command(connection,
-            "SELECT user_id FROM sessions WHERE token_hash=$1 AND expires_at > now()", Tokens.Hash(token));
-        var id = await command.ExecuteScalarAsync(Context.RequestAborted);
-        if (id is not Guid userId) return AuthenticateResult.Fail("Sesión caducada.");
+            "SELECT user_id,expires_at <= clock_timestamp()+$2 FROM sessions WHERE token_hash=$1 AND expires_at > clock_timestamp()",
+            tokenHash, SessionPolicy.RenewBelow);
+        Guid userId;
+        bool renew;
+        await using (var reader = await command.ExecuteReaderAsync(Context.RequestAborted))
+        {
+            if (!await reader.ReadAsync(Context.RequestAborted)) return AuthenticateResult.Fail("Sesión caducada.");
+            userId = reader.GetGuid(0);
+            renew = reader.GetBoolean(1);
+        }
+        if (renew)
+        {
+            // Recheck after any lock wait: expired or revoked sessions cannot be revived.
+            // The credential stays the same, so a lost response cannot lose the device's access.
+            await using var update = Database.Command(connection,
+                """
+                UPDATE sessions SET expires_at=GREATEST(expires_at,clock_timestamp()+$2)
+                WHERE token_hash=$1 AND expires_at>clock_timestamp() RETURNING user_id
+                """, tokenHash, SessionPolicy.Lifetime);
+            if (await update.ExecuteScalarAsync(Context.RequestAborted) is not Guid)
+                return AuthenticateResult.Fail("Sesión caducada.");
+        }
         var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString())], Scheme.Name);
         return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name));
     }

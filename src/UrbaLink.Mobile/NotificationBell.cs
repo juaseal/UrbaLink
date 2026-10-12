@@ -25,7 +25,7 @@ internal sealed class NotificationBell : Button
         loading=true;var token=api.Token;
         try
         {
-            var inbox=await api.Send<NotificationInbox>(HttpMethod.Get,"api/notifications");
+            var inbox=await api.Send<NotificationCount>(HttpMethod.Get,"api/notifications/count");
             if(!active||api.Token!=token)return;
             Text=inbox.UnreadCount==0?"🔔":"🔔 "+(inbox.UnreadCount>99?"99+":inbox.UnreadCount.ToString());
             SemanticProperties.SetDescription(this,$"Notificaciones: {inbox.UnreadCount} mensajes sin leer");

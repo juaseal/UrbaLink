@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
+using Npgsql;
 using UrbaLink.Contracts;
 
 internal static class AccountScenarios
@@ -57,6 +60,8 @@ internal static class AccountScenarios
         var login = await Post<SessionDto>(anonymous, "api/auth/login",
             new LoginRequest(" " + adminSession.Account.Email.ToUpperInvariant() + " ", password));
         if (login.Account.Id != adminSession.Account.Id) throw new Exception("No se normalizó el correo.");
+        if (login.ExpiresAt < DateTimeOffset.UtcNow.AddDays(179) || adminSession.ExpiresAt < DateTimeOffset.UtcNow.AddDays(179))
+            throw new Exception("El registro o el login no crean una sesión persistente.");
 
         var community = await Post<CommunityDto>(admin, "api/communities", new CreateCommunityRequest("Comunidad " + suffix));
         if (community.Role != "Admin") throw new Exception("El creador no es administrador.");
@@ -84,6 +89,59 @@ internal static class AccountScenarios
         finally { foreach (var response in races) response.Dispose(); }
         await Expect(await member.PostAsync("api/auth/logout", null), HttpStatusCode.NoContent);
         await Expect(await member.GetAsync("api/me"), HttpStatusCode.Unauthorized);
+        await CheckPersistentSessions(login, adminSession, Signed, Expect);
         Console.WriteLine("OK: registro, login, normalización, aislamiento, permisos, invitaciones atómicas y revocación.");
+    }
+
+    private static async Task CheckPersistentSessions(SessionDto login, SessionDto original,
+        Func<SessionDto, HttpClient> signed, Func<HttpResponseMessage, HttpStatusCode, Task> expect)
+    {
+        var connection = Environment.GetEnvironmentVariable("URBALINK_TEST_CONNECTION")
+            ?? throw new Exception("Ejecuta Test-Posts.ps1 -Suite accounts.");
+        if (new NpgsqlConnectionStringBuilder(connection).Database?.StartsWith("urbalink_posts_test_") != true)
+            throw new Exception("Solo se permiten bases temporales.");
+        await using var db = new NpgsqlConnection(connection);
+        await db.OpenAsync();
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(login.Token)));
+        async Task<object?> Sql(string sql)
+        {
+            await using var command = new NpgsqlCommand(sql, db);
+            command.Parameters.Add(new NpgsqlParameter { Value = hash });
+            return await command.ExecuteScalarAsync();
+        }
+        // Existing, still-valid seven-day credentials upgrade without entering a password.
+        await Sql("UPDATE sessions SET expires_at=now()+interval '7 days' WHERE token_hash=$1");
+        using (var reopened = signed(login))
+            await expect(await reopened.GetAsync("api/me"), HttpStatusCode.OK);
+        var renewed = (DateTime)(await Sql("SELECT expires_at FROM sessions WHERE token_hash=$1"))!;
+        if (renewed < DateTime.UtcNow.AddDays(179)) throw new Exception("La sesión antigua no se renovó.");
+        using var device = signed(login);
+        foreach (var response in await Task.WhenAll(device.GetAsync("api/me"), device.GetAsync("api/me")))
+            await expect(response, HttpStatusCode.OK);
+        if ((DateTime)(await Sql("SELECT expires_at FROM sessions WHERE token_hash=$1"))! != renewed)
+            throw new Exception("Se escribe la sesión innecesariamente en cada petición.");
+
+        await Sql("UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1");
+        await expect(await device.GetAsync("api/me"), HttpStatusCode.Unauthorized);
+        if ((bool)(await Sql("SELECT expires_at>now() FROM sessions WHERE token_hash=$1"))!)
+            throw new Exception("Se resucitó una sesión caducada.");
+
+        // Revoke while authentication waits to renew. The UPDATE must not recreate access.
+        await Sql("UPDATE sessions SET expires_at=now()+interval '7 days' WHERE token_hash=$1");
+        await using (var transaction = await db.BeginTransactionAsync())
+        {
+            await Sql("SELECT token_hash FROM sessions WHERE token_hash=$1 FOR UPDATE");
+            var pending = device.GetAsync("api/me");
+            await Task.Delay(200);
+            if (pending.IsCompleted) throw new Exception("La renovación no esperó el bloqueo de la sesión.");
+            await Sql("DELETE FROM sessions WHERE token_hash=$1");
+            await transaction.CommitAsync();
+            await expect(await pending, HttpStatusCode.Unauthorized);
+        }
+        using var otherDevice = signed(original);
+        await expect(await otherDevice.GetAsync("api/me"), HttpStatusCode.OK);
+        await expect(await otherDevice.PostAsync("api/auth/logout", null), HttpStatusCode.NoContent);
+        await expect(await otherDevice.GetAsync("api/me"), HttpStatusCode.Unauthorized);
+        Console.WriteLine("OK: acceso persistente, renovación de sesiones antiguas, reutilización sin contraseña, caducidad y revocación concurrente por dispositivo.");
     }
 }

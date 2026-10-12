@@ -80,6 +80,8 @@ public partial class MainPage : ContentPage
                     => "La API funciona. Falta configurar la conexión a PostgreSQL en el servidor.",
                 { Service: "UrbaLink", Status: "database_unavailable" }
                     => "La API funciona, pero no consigue conectar con PostgreSQL.",
+                { Service: "UrbaLink", Status: "database_schema_outdated" }
+                    => "El servidor necesita actualizar su base de datos antes de continuar.",
                 _ => "La API responde con un estado desconocido."
             };
         }

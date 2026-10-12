@@ -230,7 +230,7 @@ public sealed class MarketPage : ContentPage
             {
                 var content=new VerticalStackLayout {Spacing=5};
                 var name=item.OwnerId==userId?conversation.Name:item.OwnerName;
-                var open=Button(name+"  →",()=>Navigation.PushAsync(new MarketChatPage(api,community,item,conversation,userId,expired)),true);
+                var open=Button(name+"  →",()=>Navigation.PushAsync(new ConversationPage(api,community,item,conversation,userId,expired)),true);
                 content.Add(open);
                 var preview=Label(conversation.LastMessage??"Conversación iniciada",13);
                 preview.MaxLines=2;preview.LineBreakMode=LineBreakMode.TailTruncation;content.Add(preview);body.Add(Card(content));
@@ -260,7 +260,7 @@ public sealed class MarketPage : ContentPage
     private async Task OpenConversation(ItemDto item,Guid? interested)
     {
         var conversation=await api.Send<MarketConversationDto>(HttpMethod.Post,$"{Root}/{item.Id}/conversations",new StartMarketConversation(interested));
-        await Navigation.PushAsync(new MarketChatPage(api,community,item,conversation,userId,expired));
+        await Navigation.PushAsync(new ConversationPage(api,community,item,conversation,userId,expired));
     }
     private async Task ShowCreate()
     {

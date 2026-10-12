@@ -4,12 +4,16 @@ using UrbaLink.Contracts;
 
 namespace UrbaLink.Api;
 
-public static partial class MarketEndpoints
+public static class NotificationEndpoints
 {
-    private static async Task<IResult> Notifications(ClaimsPrincipal user,NpgsqlDataSource source)
+    public static void MapNotifications(this WebApplication app)
     {
-        await using var c=await source.OpenConnectionAsync();
-        await using var q=Q(c,"""
+        var group=app.MapGroup("/api/notifications").RequireAuthorization().RequireRateLimiting("api");
+        group.MapGet("",Notifications);
+        group.MapGet("/count",Count);
+    }
+
+    private const string Unread = """
             WITH unread AS (
                 SELECT t.id,COALESCE(i.id,p.id) AS subject_id,COALESCE(i.title,p.title) AS title,
                     COALESCE(i.community_id,p.community_id) AS community_id,c.name AS community_name,a.role,
@@ -25,14 +29,27 @@ public static partial class MarketEndpoints
                 WHERE COALESCE(i.owner_id,p.author_id)=$1 OR t.interested_user_id=$1
                 GROUP BY t.id,i.id,p.id,c.name,a.role
             )
+        """;
+
+    private static async Task<IResult> Count(ClaimsPrincipal user,NpgsqlDataSource source,CancellationToken ct)
+    {
+        await using var c=await source.OpenConnectionAsync(ct);
+        await using var q=Database.Command(c,Unread+" SELECT COALESCE(sum(unread_count),0)::int FROM unread",Tokens.UserId(user));
+        return Results.Ok(new NotificationCount((int)(await q.ExecuteScalarAsync(ct))!));
+    }
+
+    private static async Task<IResult> Notifications(ClaimsPrincipal user,NpgsqlDataSource source,CancellationToken ct)
+    {
+        await using var c=await source.OpenConnectionAsync(ct);
+        await using var q=Database.Command(c,Unread+"""
             SELECT n.community_id,n.community_name,n.role,n.subject_id,n.title,n.id,n.unread_count,u.name,m.body,
                 sum(n.unread_count) OVER()::int,n.kind
             FROM unread n JOIN market_messages m ON m.id=n.latest JOIN users u ON u.id=m.author_id
             ORDER BY n.latest DESC LIMIT 50
             """,Tokens.UserId(user));
         var items=new List<MessageNotification>();var count=0;
-        await using var r=await q.ExecuteReaderAsync();
-        while(await r.ReadAsync())
+        await using var r=await q.ExecuteReaderAsync(ct);
+        while(await r.ReadAsync(ct))
         {
             items.Add(new(r.GetGuid(0),r.GetString(1),r.GetString(2),r.GetInt64(3),r.GetString(4),r.GetInt64(5),r.GetInt32(6),r.GetString(7),r.GetString(8),r.GetString(10)));
             count=r.GetInt32(9);
@@ -40,18 +57,4 @@ public static partial class MarketEndpoints
         return Results.Ok(new NotificationInbox(count,items.ToArray()));
     }
 
-    private static Task<IResult> MarkRead(Guid communityId,long id,long conversationId,MessageReadRequest request,ClaimsPrincipal user,NpgsqlDataSource source) =>
-        Mutate(communityId,id,user,source,async(c,item,uid,_)=>
-        {
-            if(!await CanReadConversation(c,id,conversationId,uid,item.OwnerId))return Error("Conversación no disponible.",404);
-            if(request.UpToId<=0 || !(bool)(await Scalar(c,"SELECT EXISTS(SELECT 1 FROM market_messages WHERE conversation_id=$1 AND id=$2)",conversationId,request.UpToId))!)
-                return Error("Mensaje no disponible.",400);
-            // A read acknowledgement never consumes messages that arrived after the displayed page.
-            await Execute(c,"""
-                INSERT INTO market_message_reads(conversation_id,user_id,last_message_id) VALUES($1,$2,$3)
-                ON CONFLICT(conversation_id,user_id) DO UPDATE
-                SET last_message_id=GREATEST(market_message_reads.last_message_id,EXCLUDED.last_message_id)
-                """,conversationId,uid,request.UpToId);
-            return Results.NoContent();
-        });
 }
