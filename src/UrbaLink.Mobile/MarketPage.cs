@@ -101,7 +101,7 @@ public sealed class MarketPage : ContentPage
         cents=(int)(value*100); return true;
     }
     private static Entry Input(string hint,Keyboard? keyboard=null) => new()
-    { Placeholder=hint,Keyboard=keyboard??Keyboard.Default,TextColor=Color.FromArgb("#16352C"),BackgroundColor=Colors.White };
+    { Placeholder=hint,Keyboard=keyboard??InputBehavior.SentenceKeyboard,TextColor=Color.FromArgb("#16352C"),BackgroundColor=Colors.White };
 
     private async Task LoadCatalog(bool reset,string? requestedScope=null,string? requestedMode=null)
     {

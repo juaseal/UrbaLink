@@ -185,6 +185,69 @@ El ordenador debe seguir encendido con la API en marcha.
 En Visual Studio puedes configurar API y Mobile como proyectos de inicio
 múltiples, eligiendo el perfil lan para la API.
 
+## 4. Generar un APK para instalar en el móvil
+
+Con los requisitos de .NET MAUI y Android anteriores instalados, ejecuta estos
+comandos en PowerShell desde la raíz del repositorio (donde está `UrbaLink.slnx`):
+
+```powershell
+$env:DOTNET_CLI_HOME = Join-Path $env:TEMP 'UrbaLink-dotnet'
+$env:NUGET_PACKAGES = Join-Path (Get-Location) '.artifacts/nuget'
+
+dotnet build src/UrbaLink.Mobile/UrbaLink.Mobile.csproj `
+    -c Debug -f net10.0-android `
+    --artifacts-path .artifacts/pilot-apk `
+    -p:EmbedAssembliesIntoApk=true `
+    -p:AndroidPackageFormats=apk `
+    -p:RuntimeIdentifier=android-arm64
+
+if ($LASTEXITCODE -ne 0) { throw 'No se ha podido generar el APK.' }
+
+$apk = '.artifacts/pilot-apk/bin/UrbaLink.Mobile/debug_net10.0-android_android-arm64/com.urbalink.mobile-Signed.apk'
+$installer = '.artifacts/pilot-apk/UrbaLink-1.0.1-pruebas-arm64.apk'
+Copy-Item -LiteralPath $apk -Destination $installer
+Get-Item -LiteralPath $installer
+```
+
+El instalador queda en `.artifacts/pilot-apk/UrbaLink-1.0.1-pruebas-arm64.apk`.
+La carpeta `.artifacts` está excluida de Git. Es una compilación **Debug para
+pruebas**, firmada con la clave de depuración del equipo, para móviles Android
+ARM de 64 bits. `EmbedAssembliesIntoApk=true` incluye los ensamblados en el APK:
+no necesita Visual Studio ni Fast Deployment para ejecutarse. No es el paquete
+Release con firma de distribución para publicar en Google Play.
+
+Para instalar y conectar con el piloto:
+
+1. Copia el APK a **Descargas** del móvil, por ejemplo mediante transferencia USB.
+2. Ábrelo desde **Archivos** y pulsa **Instalar**. Si Android lo solicita, permite
+   instalar aplicaciones desde esa aplicación.
+3. Abre UrbaLink, introduce `https://urbalink-production.up.railway.app` como
+   servidor y pulsa **Comprobar conexión**.
+4. Registra una cuenta en el servidor publicado si todavía no tienes una allí.
+   Las cuentas de la base local no se trasladan automáticamente a Railway.
+
+Con Railway puedes usar Wi-Fi o datos móviles y apagar el ordenador. La dirección
+del servidor se guarda después de conectar. Para actualizar una instalación
+existente, conserva la misma clave de firma; una compilación firmada con otra
+clave no puede instalarse como actualización sobre ella.
+
+### Comprobación en el teléfono (1.0.1)
+
+- Actualiza sobre la versión anterior sin desinstalar y comprueba que conserva la sesión.
+- Con Android en modo oscuro, revisa las horas y plazas de un trayecto y el cierre
+  de una subasta. La aplicación mantiene su tema claro, incluidos los selectores.
+- Escribe un título, una descripción y un mensaje: el teclado debe ofrecer mayúscula
+  al comenzar una frase, si la configuración del teclado lo permite. Correo,
+  contraseña, invitaciones, direcciones web e importes usan sus teclados específicos.
+- En **Elegir foto**, selecciona una imagen y prueba también a cancelar: el borrador
+  y la foto anterior deben conservarse al cancelar. Se usa el selector de fotos de
+  Android; su aspecto y los álbumes disponibles dependen del dispositivo.
+- Tras iniciar sesión, guardar credenciales solo debe ofrecerse en ese momento,
+  nunca al elegir una foto ni al escribir contenido. Android decide si muestra
+  la oferta según el gestor de contraseñas configurado.
+- Comprueba que **Inicio** conserva los accesos a Objetos, Ir juntos, Ayuda y
+  servicios y toda la actividad; la barra inferior contiene solo Inicio y Perfil.
+
 ## Seguridad y publicación
 
 El tráfico HTTP está permitido únicamente en la compilación Android Debug para
@@ -248,7 +311,7 @@ La app exige conexión para confirmar el cierre de sesión en el servidor.
 ## Inicio y gestión de comunidades
 
 La app recuerda el servidor y abre la sesión guardada al iniciar. La navegación principal
-se divide en Inicio, Explorar y Perfil. Inicio muestra la comunidad seleccionada,
+se divide en Inicio y Perfil. Inicio muestra la comunidad seleccionada,
 recuentos reales, accesos a ayuda, material y coche, avisos y actividad reciente.
 Objetos abre el catálogo de venta, alquiler y subastas. Ir juntos abre fichas de
 trayectos con horarios y condiciones; Ayuda sigue utilizando publicaciones. El alquiler se acuerda por conversación, sin reservas.
@@ -270,7 +333,7 @@ para cargar las nuevas pantallas y las reglas de acceso.
 ## Objetos: venta, alquiler y subastas
 
 1. Reinicia la API para aplicar las migraciones 005 y 006 y ejecuta de nuevo la app.
-2. En **Inicio** o **Explorar**, entra en **Objetos → Explorar**.
+2. En **Inicio**, entra en **Objetos → Explorar**.
 3. **Ofrecer un objeto** permite añadir una foto, título, descripción y modalidad:
    - **Venta:** precio fijo en euros; el propietario puede marcarlo vendido en ⋮.
    - **Alquiler / préstamo:** precio por hora, día o semana; 0 € indica préstamo gratuito.
@@ -309,7 +372,7 @@ compatibilidad, pero ninguna pantalla ni ruta de la API nueva la utiliza.
 
 ## Campana de mensajes sin leer
 
-La cabecera de Inicio, Explorar y Perfil muestra una campana con el total de mensajes
+La cabecera de Inicio y Perfil muestra una campana con el total de mensajes
 sin leer de todas las comunidades activas de la cuenta. Se consulta cada 10 segundos
 mientras esa pantalla está visible. No cuenta los mensajes enviados por uno mismo.
 La campana abre una bandeja agrupada por conversación; tocar una tarjeta lleva al chat.
@@ -324,7 +387,7 @@ La migración 007 añade únicamente el estado de lectura, sin modificar mensaje
 
 ## Trayectos en coche
 
-En **Inicio / Explorar → Ir juntos → Ofrecer un trayecto** se publican rutas semanales:
+En **Inicio → Ir juntos → Ofrecer un trayecto** se publican rutas semanales:
 
 - Origen, destino y punto de encuentro opcional.
 - Días de salida de ida (lunes a domingo) y hora local de salida.
@@ -348,7 +411,7 @@ Validación aislada:
 
 ## Ayuda y servicios
 
-Inicio y Explorar reúnen las antiguas secciones de ayuda y talento en **Ayuda y servicios**.
+Inicio reúne las antiguas secciones de ayuda y talento en **Ayuda y servicios**.
 El filtro Todas incluye únicamente Necesito ayuda, Servicios y Recomendaciones.
 Los filtros aparecen como botones visibles y se adaptan al ancho de la pantalla.
 Tocar el título o el resumen de una tarjeta abre su detalle; el menú ⋮ conserva
@@ -385,3 +448,41 @@ genera un APK completo con `-p:EmbedAssembliesIntoApk=true`; comprueba también 
 no quedan ensamblados antiguos en `files/.__override__` del almacenamiento privado
 de la app. No borres los datos de la aplicación para resolverlo: perderías su sesión
 y preferencias. En la revisión local se apartó esa carpeta como `files/qa-override-backup`.
+
+## Animales: perdidos y encontrados (MVP)
+
+Inicio → **Animales** permite publicar avisos de perros y gatos perdidos o encontrados.
+El formulario pide especie, zona aproximada, fecha/hora y descripción; admite nombre
+opcional en pérdidas y una foto opcional. En hallazgos se indica si el animal está contigo.
+Las imágenes usan el mismo tratamiento de Objetos: JPEG reducido, sin metadatos desde
+Android, validación en backend y entrega solo a miembros de la comunidad.
+
+Los avisos activos aparecen primero en su propia lista paginada. **Ver avisos cerrados**
+permite consultar los anteriores. El autor puede editar y cerrar con **Ha vuelto a casa**
+o **Retirar aviso**; un administrador de esa comunidad solo puede retirarlo. Los cambios
+y cierres quedan registrados con actor y fecha. La edición detecta versiones obsoletas.
+
+**Contactar en privado** abre una conversación entre el autor y cada vecino. Reutiliza
+los mensajes, reintentos y confirmaciones de lectura del marketplace; aparece en la
+campana existente. Los administradores no pueden leer chats ajenos. Tras cerrar el aviso
+se conservan las conversaciones existentes; no se abren otras nuevas. No hay alertas
+masivas ni notificaciones push: la campana avisa de mensajes mientras la app está abierta.
+
+La migración **012_animal_notices.sql** es aditiva: crea avisos y su historial, y añade
+un tipo de conversación a las tablas existentes. No elimina ni transforma publicaciones,
+objetos o chats anteriores. Se aplica mediante el mecanismo habitual de migraciones
+(en desarrollo al arrancar; en despliegue mediante el paso de migración documentado).
+No se encontraron modelos ni tablas de gatos previos en este repositorio.
+
+No incluye registro de mascotas, acreditación de propiedad, microchips, colonias/CER,
+mapas, coincidencias ni IA. Un aviso representa una pérdida o hallazgo, no una identidad
+permanente ni una prueba de propiedad. No publiques teléfonos ni direcciones precisas.
+
+Pruebas de integración en una base temporal, con PostgreSQL local arrancado:
+
+    pwsh -File scripts/Test-Posts.ps1 -Suite animals
+
+Cubren pérdida, hallazgo, fotografía, contacto, campana, lectura, recuperación, retirada,
+privacidad incluso frente a administradores, aislamiento, reintentos concurrentes,
+edición obsoleta, paginación y persistencia tras reiniciar. Antes de distribuir, revisar
+visualmente en un dispositivo Android el formulario, selección de foto y navegación.

@@ -1,4 +1,4 @@
-param([ValidateSet('posts', 'comments', 'lifecycle', 'market', 'rides', 'services', 'architecture', 'accounts')][string]$Suite = 'posts')
+param([ValidateSet('posts', 'comments', 'lifecycle', 'market', 'rides', 'services', 'architecture', 'accounts', 'animals')][string]$Suite = 'posts')
 # Requires PowerShell 7, Docker Desktop and the project's local PostgreSQL container.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -71,12 +71,12 @@ try {
         }
         if (!$ready) { throw 'La API no quedó lista.' }
         if ($run -eq 0) {
-            if ($Suite -in @('market', 'architecture', 'accounts')) { $env:URBALINK_TEST_CONNECTION = $connection.ConnectionString }
+            if ($Suite -in @('market', 'architecture', 'accounts', 'animals')) { $env:URBALINK_TEST_CONNECTION = $connection.ConnectionString }
             & dotnet $checks $url $Suite
             if ($LASTEXITCODE -ne 0) { throw 'Fallaron las pruebas del tablón.' }
-            $countBefore = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM users) + (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM market_items) + (SELECT count(*) FROM market_bids) + (SELECT count(*) FROM market_messages)'
+            $countBefore = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM users) + (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM market_items) + (SELECT count(*) FROM market_bids) + (SELECT count(*) FROM market_messages) + (SELECT count(*) FROM animal_notices) + (SELECT count(*) FROM animal_notice_history)'
         } else {
-            $countAfter = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM users) + (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM market_items) + (SELECT count(*) FROM market_bids) + (SELECT count(*) FROM market_messages)'
+            $countAfter = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM users) + (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM market_items) + (SELECT count(*) FROM market_bids) + (SELECT count(*) FROM market_messages) + (SELECT count(*) FROM animal_notices) + (SELECT count(*) FROM animal_notice_history)'
             if ($countBefore -ne $countAfter -or [int]$countAfter -lt 1) { throw 'Se perdieron publicaciones al reiniciar.' }
             $versions = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT count(*) FROM schema_versions'
             if ([int]$versions -ne @(Get-ChildItem (Join-Path $root 'src/UrbaLink.Api/Data') -Filter '*.sql').Count) { throw 'Migraciones inesperadas.' }
@@ -99,5 +99,3 @@ try {
     $env:PATH = $previousPath
     Pop-Location
 }
-
-

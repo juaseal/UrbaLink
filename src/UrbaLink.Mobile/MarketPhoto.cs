@@ -4,9 +4,20 @@ namespace UrbaLink.Mobile;
 
 internal static class MarketPhoto
 {
-    public static async Task<byte[]?> Pick()
+    public static async Task<byte[]?> Pick(string title = "Foto del objeto")
     {
-        var file = await FilePicker.Default.PickAsync(new PickOptions { PickerTitle = "Foto del objeto", FileTypes = FilePickerFileType.Images });
+        List<FileResult> files;
+        try
+        {
+            files = await MediaPicker.Default.PickPhotosAsync(new MediaPickerOptions
+            {
+                Title = title, SelectionLimit = 1,
+                // Orientation and metadata are handled below when creating the thumbnail.
+                RotateImage = false, PreserveMetaData = true
+            });
+        }
+        catch (OperationCanceledException) { return null; }
+        var file = files.FirstOrDefault();
         if (file is null) return null;
         await using var stream = await file.OpenReadAsync();
         using var memory = new MemoryStream();

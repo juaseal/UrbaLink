@@ -12,7 +12,7 @@ public sealed class AccountPage : ContentPage
     private string? token { get => api.Token; set => api.Token = value; }
     private AccountDto? account;
     private readonly VerticalStackLayout body = new() { Spacing = 14 };
-    private readonly Grid tabs = new() { ColumnDefinitions = new ColumnDefinitionCollection { new(GridLength.Star), new(GridLength.Star), new(GridLength.Star) }, Padding = new Thickness(12,8), BackgroundColor = Colors.White };
+    private readonly Grid tabs = new() { ColumnDefinitions = new ColumnDefinitionCollection { new(GridLength.Star), new(GridLength.Star) }, Padding = new Thickness(12,8), BackgroundColor = Colors.White };
     private string section = "Inicio";
     private Guid? selectedCommunity;
     private CommunityDto[] communities = [];
@@ -87,7 +87,9 @@ public sealed class AccountPage : ContentPage
 
     private static Entry Input(string placeholder, bool password = false) => new()
     {
-        Placeholder = placeholder, IsPassword = password, TextColor = Color.FromArgb("#16352C"),
+        Placeholder = placeholder, IsPassword = password,
+        Keyboard = password ? Keyboard.Plain : InputBehavior.SentenceKeyboard,
+        TextColor = Color.FromArgb("#16352C"),
         PlaceholderColor = Color.FromArgb("#52665F"), BackgroundColor = Colors.White
     };
 
@@ -134,6 +136,7 @@ public sealed class AccountPage : ContentPage
 
     private void ShowLogin(bool register = false)
     {
+        InputBehavior.CancelLogin();
         tabs.IsVisible = false;
         bell.Stop();bell.IsVisible=false;
         body.Clear();
@@ -141,7 +144,9 @@ public sealed class AccountPage : ContentPage
         var name = Input("Tu nombre");
         var email = Input("Correo electrónico");
         email.Keyboard = Keyboard.Email;
+        email.AutomationId = "account-email";
         var password = Input("Contraseña (mínimo 12 caracteres)", true);
+        password.AutomationId = register ? "account-new-password" : "account-password";
         if (register) body.Add(name);
         body.Add(email);
         body.Add(password);
@@ -159,8 +164,9 @@ public sealed class AccountPage : ContentPage
                 ? await Send<SessionDto>(HttpMethod.Post, "api/auth/register",
                     new RegisterRequest(name.Text, email.Text, password.Text))
                 : await Send<SessionDto>(HttpMethod.Post, "api/auth/login", new LoginRequest(email.Text, password.Text));
-            password.Text = "";
             await SecureStorage.Default.SetAsync(storageKey, session.Token);
+            InputBehavior.CompleteLogin();
+            password.Text = "";
             token = session.Token;
             account = session.Account;
             await ShowCommunities();
@@ -188,7 +194,7 @@ public sealed class AccountPage : ContentPage
         tabs.Clear();
         tabs.IsVisible = true;
         bell.IsVisible=true;bell.Start();
-        var labels = new[] { "Inicio", "Explorar", "Perfil" };
+        var labels = new[] { "Inicio", "Perfil" };
         for (var i = 0; i < labels.Length; i++)
         {
             var label = labels[i];
@@ -243,14 +249,6 @@ public sealed class AccountPage : ContentPage
                 await Run(async () => { selectedCommunity = chosen.Id; await ShowCommunities(); });
         };
         body.Add(selector);
-        if (section == "Explorar")
-        {
-            body.Add(Heading("¿Qué necesitas hoy?"));
-            body.Add(Text("Encuentra ayuda y cosas que compartir cerca de casa."));
-            AddNeeds(current, overview!);
-            body.Add(Action("Ver toda la actividad", () => OpenBoard(current)));
-            return;
-        }
         var hero = new VerticalStackLayout { Spacing = 12 };
         hero.Add(new Label { Text = "CERCA DE TI", FontSize = 11, CharacterSpacing = 2, TextColor = Color.FromArgb("#C6E8D6") });
         hero.Add(new Label { Text = "La vida en tu urba,\nun poco más fácil.", FontSize = 29, FontAttributes = FontAttributes.Bold, TextColor = Colors.White });
@@ -294,7 +292,8 @@ public sealed class AccountPage : ContentPage
         var choices = new[] {
             ("Ayuda y servicios", "Solicitudes, servicios y recomendaciones", PostCategories.HelpGroup, "#E4F1EA"),
             ("Objetos", $"{overview.SharedItems} objetos · venta, alquiler y pujas", "Material", "#F8EDDC"),
-            ("Ir juntos", $"{overview.Routes} trayectos publicados", "Coche", "#E4EDF7")
+            ("Ir juntos", $"{overview.Routes} trayectos publicados", "Coche", "#E4EDF7"),
+            ("Animales", "Perdidos y encontrados", "Animales", "#E4F1EA")
         };
         for (var i=0; i<choices.Length; i++)
         {
@@ -302,7 +301,7 @@ public sealed class AccountPage : ContentPage
             var content=new VerticalStackLayout { Spacing=7 };
             content.Add(Heading(choice.Item1,18));
             content.Add(new Label { Text=choice.Item2, FontSize=12, TextColor=Color.FromArgb("#52665F") });
-            var open=Action("Explorar  →", () => choice.Item3 == "Material" ? Navigation.PushAsync(new MarketPage(api, current, account!.Id, Expired)) : choice.Item3 == "Coche" ? Navigation.PushAsync(new RidePage(api,current,account!.Id,Expired)) : OpenBoard(current,choice.Item3));
+            var open=Action("Explorar  →", () => choice.Item3 == "Animales" ? Navigation.PushAsync(new AnimalsPage(api,current,account!.Id,Expired)) : choice.Item3 == "Material" ? Navigation.PushAsync(new MarketPage(api, current, account!.Id, Expired)) : choice.Item3 == "Coche" ? Navigation.PushAsync(new RidePage(api,current,account!.Id,Expired)) : OpenBoard(current,choice.Item3));
             open.BackgroundColor=Colors.Transparent;
             open.TextColor=Color.FromArgb("#174B3D");
             open.Padding=0;
@@ -344,6 +343,7 @@ public sealed class AccountPage : ContentPage
         body.Clear(); body.Add(Heading("Únete a tus vecinos"));
         body.Add(Text("Introduce el código que te ha enviado un administrador."));
         var code=Input("Código de invitación");
+        code.Keyboard = Keyboard.Plain;
         body.Add(code);
         body.Add(Action("Unirme",async () => {
             var joined=await Send<CommunityDto>(HttpMethod.Post,"api/communities/join",new JoinRequest(code.Text ?? ""));
@@ -420,6 +420,3 @@ public sealed class AccountPage : ContentPage
     }
 
 }
-
-
-

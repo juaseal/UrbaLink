@@ -38,7 +38,7 @@ public sealed class NotificationsPage : ContentPage
         if(!active)return;
         list.Clear();
         list.Add(new Label {Text=inbox.UnreadCount==0?"Estás al día":"Tienes "+inbox.UnreadCount+" mensajes sin leer",FontSize=24,FontAttributes=FontAttributes.Bold,TextColor=Color.FromArgb("#16352C")});
-        if(inbox.UnreadCount==0)list.Add(new Label {Text="Aquí aparecerán los mensajes sobre tus objetos y servicios, y las respuestas a tus consultas.",TextColor=Color.FromArgb("#52665F")});
+        if(inbox.UnreadCount==0)list.Add(new Label {Text="Aquí aparecerán los mensajes sobre tus objetos, servicios y avisos de animales, y las respuestas a tus consultas.",TextColor=Color.FromArgb("#52665F")});
         foreach(var n in inbox.Items)
         {
             var content=new VerticalStackLayout {Spacing=7};
@@ -50,6 +50,14 @@ public sealed class NotificationsPage : ContentPage
                 StrokeShape=new Microsoft.Maui.Controls.Shapes.RoundRectangle {CornerRadius=18}};
             var tap=new TapGestureRecognizer();tap.Tapped+=async(_,_)=>await Run(async()=>
             {
+                if(n.Kind=="Animal")
+                {
+                    var animalDetail=await api.Send<AnimalNoticeDetail>(HttpMethod.Get,$"api/communities/{n.CommunityId}/animals/{n.ItemId}");
+                    var chat=animalDetail.Conversations.FirstOrDefault(c=>c.Id==n.ConversationId);
+                    if(chat is null){status.Text="Esta conversación ya no está disponible.";return;}
+                    await Navigation.PushAsync(new ConversationPage(api,new CommunityDto(n.CommunityId,n.CommunityName,n.Role),animalDetail.Notice,chat,userId,expired));
+                    return;
+                }
                 if(n.Kind=="Service")
                 {
                     var service=await api.Send<ServiceDetail>(HttpMethod.Get,$"api/communities/{n.CommunityId}/services/{n.ItemId}");

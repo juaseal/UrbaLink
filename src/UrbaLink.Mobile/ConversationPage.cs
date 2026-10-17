@@ -30,6 +30,9 @@ public sealed class ConversationPage : ContentPage
     public ConversationPage(ApiClient api,CommunityDto community,PostDto service,MarketConversationDto conversation,Guid userId,Func<Task> expired)
         : this(api,$"api/communities/{community.Id}/services/{service.Id}/conversations/{conversation.Id}/messages",
             service.AuthorId==userId?conversation.Name:service.AuthorName,service.Title,userId,expired) { }
+    public ConversationPage(ApiClient api,CommunityDto community,AnimalNoticeDto notice,MarketConversationDto conversation,Guid userId,Func<Task> expired)
+        : this(api,$"api/communities/{community.Id}/animals/{notice.Id}/conversations/{conversation.Id}/messages",
+            notice.AuthorId==userId?conversation.Name:notice.AuthorName,notice.Title,userId,expired) { }
     private ConversationPage(ApiClient api,string path,string title,string subject,Guid userId,Func<Task> expired)
     {
         this.api=api;this.userId=userId;this.expired=expired;this.path=path;

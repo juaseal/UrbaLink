@@ -69,6 +69,7 @@ if (app.Services.GetService<NpgsqlDataSource>() is { } database)
     app.MapServiceChats();
     app.MapNotifications();
     app.MapRides();
+    app.MapAnimalNotices();
 }
 
 app.MapGet("/health/live", () => Results.Ok(
@@ -101,6 +102,3 @@ app.MapGet("/health/ready", async (IServiceProvider services, ILogger<Program> l
 });
 
 app.Run();
-
-
-
