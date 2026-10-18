@@ -19,6 +19,8 @@ public sealed class AccountPage : ContentPage
     private readonly Label status = new() { TextColor = Color.FromArgb("#8B3228") };
     private readonly ActivityIndicator busy = new() { Color = Color.FromArgb("#176B57") };
 
+    public AccountPage() : this(AppServer.Address) { }
+
     public AccountPage(Uri server)
     {
         Title = "Mi comunidad";

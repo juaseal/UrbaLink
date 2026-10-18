@@ -22,8 +22,11 @@ public sealed class SessionAuthentication(
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var header = Request.Headers.Authorization.ToString();
-        if (!header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return AuthenticateResult.NoResult();
-        var token = header[7..];
+        var token = WebSessions.RequestToken(Context);
+        if (token is null) return AuthenticateResult.NoResult();
+        var cookieSession = !header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase);
+        if (cookieSession && !WebSessions.IsSameOriginRequest(Context))
+            return AuthenticateResult.Fail("Origen de sesión no válido.");
         if (token.Length != 64 || !token.All(Uri.IsHexDigit)) return AuthenticateResult.Fail("Sesión inválida.");
         var source = services.GetService<NpgsqlDataSource>();
         if (source is null) return AuthenticateResult.Fail("Base de datos no disponible.");
@@ -51,6 +54,7 @@ public sealed class SessionAuthentication(
                 """, tokenHash, SessionPolicy.Lifetime);
             if (await update.ExecuteScalarAsync(Context.RequestAborted) is not Guid)
                 return AuthenticateResult.Fail("Sesión caducada.");
+            if (cookieSession) WebSessions.Set(Context, token, DateTimeOffset.UtcNow.Add(SessionPolicy.Lifetime));
         }
         var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString())], Scheme.Name);
         return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name));

@@ -58,9 +58,10 @@ No debe activarse para un proceso publicado directamente a Internet.
 6. Desplegar. Las migraciones se ejecutan antes de arrancar la API; si fallan,
    el despliegue debe detenerse. Generar el dominio público de la API al estar lista.
 7. Comprobar por HTTPS `/health/live` (`alive`) y `/health/ready` (`ready`).
-8. Introducir la URL HTTPS en Android y probar con datos móviles: registro,
+8. La app conecta automáticamente con el dominio de producción. Probar con datos móviles: registro,
    acceso, invitación y conversación privada entre dos cuentas de pruebas.
 
+Si cambias el dominio, compila la app con `-p:UrbaLinkServerUrl=https://NUEVO_DOMINIO`.
 El cambio de dirección requiere iniciar sesión: el almacenamiento seguro del
 cliente asocia cada sesión a su servidor. Sin una migración de datos, las cuentas
 locales no existen en la nueva base.
@@ -175,3 +176,33 @@ La suite utiliza una base temporal y configuración ficticia exclusiva de prueba
 Comprueba acceso con contraseña y autorización global, aprobación, moderación,
 privacidad, bloqueos, auditoría y persistencia tras reiniciar. Las suites anteriores
 usan `Communities__RequireApproval=false` solo dentro de sus procesos de prueba.
+
+
+## Web de vecinos en el mismo servicio
+
+La raíz `/` ofrece ahora la web de los vecinos y `/admin/` conserva el panel de
+plataforma. Se publican juntos con la API desde la rama `main`. No es necesario
+crear un proyecto de Sites, un segundo servicio Railway ni otra base de datos.
+
+1. Revisa y sube los cambios de esta versión al mismo repositorio/rama que ya
+   utiliza el servicio API de Railway.
+2. Conserva el Dockerfile, las variables de PostgreSQL y el pre-deploy de migraciones
+   habituales. Esta entrega no añade migraciones nuevas.
+3. Mantén `ASPNETCORE_ENVIRONMENT=Production` y `Hosting__RailwayEdge=true`.
+   La cabecera del proxy HTTPS permite emitir correctamente la cookie Secure.
+4. Espera al despliegue del nuevo commit y comprueba `/health/ready`.
+5. Abre la raíz del dominio HTTPS. Los vecinos pueden usar sus cuentas existentes,
+   entrar con invitación o solicitar una comunidad desde el móvil o el ordenador.
+   El panel de plataforma permanece en `/admin/`.
+
+La web llama a `/api` en el mismo dominio y no necesita configurar CORS ni pedir
+una URL a los vecinos. No coloques una caché pública delante de respuestas de API.
+El servidor entrega `Cache-Control: no-store` y una política CSP para la web y API.
+Las sesiones Android con Bearer siguen funcionando; las sesiones web son distintas,
+renovables y revocables desde el cierre de sesión de ese navegador.
+
+Pruebas de sesión web, CSRF, privacidad y compatibilidad:
+
+    pwsh -File scripts/Test-Posts.ps1 -Suite web
+    pwsh -File scripts/Test-Posts.ps1 -Suite services
+    pwsh -File scripts/Test-Posts.ps1 -Suite platform

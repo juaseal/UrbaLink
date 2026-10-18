@@ -37,7 +37,7 @@ public static class AccountEndpoints
 
     private static string NormalizeEmail(string? email) => (email ?? "").Trim().ToLowerInvariant();
 
-    private static async Task<IResult> Register(RegisterRequest request, NpgsqlDataSource source, CancellationToken ct)
+    internal static async Task<IResult> Register(RegisterRequest request, NpgsqlDataSource source, CancellationToken ct)
     {
         var name = request.Name?.Trim() ?? "";
         var email = NormalizeEmail(request.Email);
@@ -66,7 +66,7 @@ public static class AccountEndpoints
         }
     }
 
-    private static async Task<IResult> Login(LoginRequest request, NpgsqlDataSource source, CancellationToken ct)
+    internal static async Task<IResult> Login(LoginRequest request, NpgsqlDataSource source, CancellationToken ct)
     {
         var email = NormalizeEmail(request.Email);
         if (email.Length > 254 || request.Password is null || request.Password.Length is < 1 or > 128)
@@ -113,8 +113,9 @@ public static class AccountEndpoints
     {
         await using var connection = await source.OpenConnectionAsync(ct);
         await using var command = Database.Command(connection,
-            "DELETE FROM sessions WHERE token_hash=$1", Tokens.Hash(context.Request.Headers.Authorization.ToString()[7..]));
+            "DELETE FROM sessions WHERE token_hash=$1", Tokens.Hash(WebSessions.RequestToken(context)!));
         await command.ExecuteNonQueryAsync(ct);
+        WebSessions.Clear(context);
         return Results.NoContent();
     }
 

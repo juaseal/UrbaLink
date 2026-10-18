@@ -4,5 +4,5 @@
        xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
        xmlns:local="clr-namespace:UrbaLink.Mobile"
        Title="UrbaLink" FlyoutBehavior="Disabled">
-    <ShellContent Title="UrbaLink" ContentTemplate="{DataTemplate local:MainPage}" Route="MainPage" />
+    <ShellContent Title="UrbaLink" ContentTemplate="{DataTemplate local:AccountPage}" Route="MainPage" />
 </Shell>

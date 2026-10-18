@@ -7,9 +7,45 @@ La distribución de módulos, los invariantes de concurrencia, la configuración
 de disponibilidad y los límites pendientes se describen en [ARCHITECTURE.md](ARCHITECTURE.md).
 El despliegue del piloto con API y PostgreSQL en Railway se describe en [DEPLOYMENT.md](DEPLOYMENT.md).
 
+
+## Web de vecinos
+
+La versión web se sirve en la raíz de la API: abre el dominio de Railway desde
+el navegador, sin APK ni dirección de servidor dentro de la aplicación. El panel
+administrativo continúa en `/admin/`. Ambas interfaces usan las mismas cuentas,
+comunidades, publicaciones y conversaciones que Android.
+
+Esta primera versión web incluye acceso y registro, sesión persistente, invitaciones,
+solicitud de comunidades, inicio, tablón con filtros, publicación, comentarios,
+Servicios con contacto privado y bandeja de conversaciones leídas y pendientes.
+Los chats existentes de Objetos y Animales también se pueden responder desde la
+bandeja web. Incluye denuncias de contenido y mensajes, retirada de publicaciones
+y comentarios por sus autores o administradores, e invitaciones para administradores
+locales. Las nuevas comunidades requieren la aprobación de plataforma habitual.
+
+Los catálogos y formularios completos de Objetos, Trayectos y Animales siguen en
+Android y quedan para la siguiente fase web. La campana de esta versión avisa de
+mensajes privados; no hay push con el navegador cerrado ni avisos de comentarios.
+
+La sesión del navegador utiliza una cookie HttpOnly, SameSite=Strict y Secure en
+producción. Las solicitudes se limitan al mismo origen y requieren una cabecera
+propia para evitar peticiones desde otras webs. No se guardan contraseñas ni tokens
+en localStorage; solo se recuerda la comunidad seleccionada. Cerrar sesión revoca
+esa sesión y conserva las sesiones de otros dispositivos.
+
+Se trabaja en la misma rama `main` y no hace falta otro servicio Railway, variables
+nuevas ni migraciones adicionales. El Dockerfile existente publica también `wwwroot`.
+Consulta [DEPLOYMENT.md](DEPLOYMENT.md#web-de-vecinos-en-el-mismo-servicio) para actualizar.
+
+    pwsh -File scripts/Test-Posts.ps1 -Suite web
+
+Para revisar el navegador con datos ficticios y limpieza de la base al terminar:
+
+    pwsh -File scripts/Test-Posts.ps1 -Suite web -Preview
+
 ## Qué funciona en esta entrega
 
-- Conexión de la app Android con la API y PostgreSQL.
+- Conexión automática de la app Android con el servidor de UrbaLink.
 - Registro con nombre, correo y contraseña; inicio y cierre de sesión.
 - Sesiones persistentes de 180 días, renovadas con el uso como máximo una vez al
   día en condiciones normales. Se guarda solo el token en SecureStorage, nunca
@@ -40,7 +76,7 @@ que represente oficialmente a una urbanización.
    conexión configurada, se aplica la migración SQL inicial de forma transaccional
    e idempotente, con un bloqueo para evitar migraciones simultáneas.
 3. Ejecuta UrbaLink.Mobile de nuevo desde Visual Studio.
-4. Comprueba la conexión y pulsa **Entrar en UrbaLink**.
+4. La app abre directamente el acceso a tu cuenta. Para probar contra la API local, compila con `UrbaLinkServerUrl` como se indica en la sección de Wi-Fi.
 5. Pulsa **Quiero registrarme**. La contraseña debe tener 12–128 caracteres.
 6. Crea una comunidad, por ejemplo El Carambolo. Tu cuenta será administradora.
 7. Pulsa **Invitar**, copia el código y vuelve atrás.
@@ -175,9 +211,14 @@ la migración impide iniciar la API: arranca primero la base de datos.
    puertos en el router ni desactives el firewall.
 5. Abre UrbaLink.slnx en Visual Studio. Configura UrbaLink.Mobile como proyecto
    de inicio, conecta el móvil con depuración USB y ejecuta en Debug.
-6. Introduce http://IP_DE_TU_PC:5080 y pulsa Comprobar conexión.
+6. Para una compilación local de desarrollo, selecciona el servidor al compilar:
 
-En el emulador Android, usa http://10.0.2.2:5080.
+       dotnet build src/UrbaLink.Mobile -f net10.0-android -p:UrbaLinkServerUrl=http://IP_DE_TU_PC:5080
+
+   Despliega esa compilación en el teléfono. La app no muestra un selector de servidor.
+   Sin esta propiedad, tanto Debug como Release utilizan el servidor de producción.
+
+En el emulador Android, compila con `-p:UrbaLinkServerUrl=http://10.0.2.2:5080`.
 localhost en el teléfono se refiere al propio teléfono.
 Una vez instalada la app, puedes desconectar el USB y seguir probando por Wi-Fi.
 El ordenador debe seguir encendido con la API en marcha.
@@ -204,12 +245,12 @@ dotnet build src/UrbaLink.Mobile/UrbaLink.Mobile.csproj `
 if ($LASTEXITCODE -ne 0) { throw 'No se ha podido generar el APK.' }
 
 $apk = '.artifacts/pilot-apk/bin/UrbaLink.Mobile/debug_net10.0-android_android-arm64/com.urbalink.mobile-Signed.apk'
-$installer = '.artifacts/pilot-apk/UrbaLink-1.0.2-pruebas-arm64.apk'
+$installer = '.artifacts/pilot-apk/UrbaLink-1.0.3-pruebas-arm64.apk'
 Copy-Item -LiteralPath $apk -Destination $installer
 Get-Item -LiteralPath $installer
 ```
 
-El instalador queda en `.artifacts/pilot-apk/UrbaLink-1.0.2-pruebas-arm64.apk`.
+El instalador queda en `.artifacts/pilot-apk/UrbaLink-1.0.3-pruebas-arm64.apk`.
 La carpeta `.artifacts` está excluida de Git. Es una compilación **Debug para
 pruebas**, firmada con la clave de depuración del equipo, para móviles Android
 ARM de 64 bits. `EmbedAssembliesIntoApk=true` incluye los ensamblados en el APK:
@@ -221,13 +262,13 @@ Para instalar y conectar con el piloto:
 1. Copia el APK a **Descargas** del móvil, por ejemplo mediante transferencia USB.
 2. Ábrelo desde **Archivos** y pulsa **Instalar**. Si Android lo solicita, permite
    instalar aplicaciones desde esa aplicación.
-3. Abre UrbaLink, introduce `https://urbalink-production.up.railway.app` como
-   servidor y pulsa **Comprobar conexión**.
+3. Abre UrbaLink: conecta automáticamente con `https://urbalink-production.up.railway.app`
+   y muestra el inicio de sesión o recupera tu sesión guardada.
 4. Registra una cuenta en el servidor publicado si todavía no tienes una allí.
    Las cuentas de la base local no se trasladan automáticamente a Railway.
 
 Con Railway puedes usar Wi-Fi o datos móviles y apagar el ordenador. La dirección
-del servidor se guarda después de conectar. Para actualizar una instalación
+del servidor se configura al compilar; los vecinos no necesitan introducirla. Para actualizar una instalación
 existente, conserva la misma clave de firma; una compilación firmada con otra
 clave no puede instalarse como actualización sobre ella.
 
@@ -310,7 +351,7 @@ La app exige conexión para confirmar el cierre de sesión en el servidor.
 
 ## Inicio y gestión de comunidades
 
-La app recuerda el servidor y abre la sesión guardada al iniciar. La navegación principal
+La app utiliza el servidor configurado al compilar y abre la sesión guardada al iniciar. La navegación principal
 se divide en Inicio y Perfil. Inicio muestra la comunidad seleccionada,
 recuentos reales, accesos a ayuda, material y coche, avisos y actividad reciente.
 Objetos abre el catálogo de venta, alquiler y subastas. Ir juntos abre fichas de
@@ -505,3 +546,19 @@ para autorizar tu cuenta en Railway. El panel se despliega
 con la API; los botones de denuncia requieren actualizar el APK.
 
     pwsh -File scripts/Test-Posts.ps1 -Suite platform
+
+
+## Inicio automático (1.0.3)
+
+La app abre directamente la pantalla de acceso a UrbaLink y recupera la sesión
+cuando existe. Los vecinos no introducen direcciones, IP ni comprobaciones técnicas.
+Si falla la conexión, la pantalla de acceso permite reintentar y conserva el acceso
+guardado. Se mantiene el mismo almacenamiento de sesión para la URL de producción.
+Las direcciones `server_address` de versiones anteriores ya no seleccionan el destino;
+una sesión de un servidor de pruebas no se envía al servidor de producción.
+
+La propiedad MSBuild `UrbaLinkServerUrl` selecciona el servidor al compilar. Su valor
+predeterminado es `https://urbalink-production.up.railway.app`; solo Debug permite
+HTTP para pruebas locales. Release exige HTTPS. Si cambia el dominio de producción,
+actualiza esta propiedad y distribuye la app; usar un dominio propio estable evita
+que los cambios del proveedor obliguen a cambiar la dirección en el APK.

@@ -32,8 +32,11 @@
 		<ApplicationId>com.urbalink.mobile</ApplicationId>
 
 		<!-- Versions -->
-		<ApplicationDisplayVersion>1.0.2</ApplicationDisplayVersion>
-		<ApplicationVersion>3</ApplicationVersion>
+		<ApplicationDisplayVersion>1.0.3</ApplicationDisplayVersion>
+		<ApplicationVersion>4</ApplicationVersion>
+
+		<!-- The server is selected by the build, never by the neighbour. -->
+		<UrbaLinkServerUrl Condition="'$(UrbaLinkServerUrl)' == ''">https://urbalink-production.up.railway.app</UrbaLinkServerUrl>
 
 		<!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->
 		<WindowsPackageType>None</WindowsPackageType>
@@ -66,6 +69,12 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+	</ItemGroup>
+	<ItemGroup>
+		<AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+			<_Parameter1>UrbaLinkServerUrl</_Parameter1>
+			<_Parameter2>$(UrbaLinkServerUrl)</_Parameter2>
+		</AssemblyAttribute>
 	</ItemGroup>
 
 <ItemGroup><ProjectReference Include="..\UrbaLink.Contracts\UrbaLink.Contracts.csproj" /></ItemGroup></Project>
