@@ -6,7 +6,7 @@ namespace UrbaLink.Api;
 
 public static class PlatformEndpoints
 {
-    public sealed record LoginInput(string Email,string Password,string Code);
+    public sealed record LoginInput(string Email,string Password);
     public sealed record Decision(string State,string Reason);
     private static readonly PasswordHasher<string> Hasher=new();
     private static readonly string DummyHash=Hasher.HashPassword("",Tokens.New());
@@ -40,14 +40,7 @@ public static class PlatformEndpoints
         await using(var q=Database.Command(c,"SELECT id,password_hash FROM users WHERE email=$1 AND NOT is_suspended FOR SHARE",email))
         await using(var r=await q.ExecuteReaderAsync(ct)){if(await r.ReadAsync(ct)){uid=r.GetGuid(0);hash=r.GetString(1);}}
         var password=Hasher.VerifyHashedPassword(email,hash,input.Password);
-        var step=PlatformTotp.Verify(config[$"PlatformAdmin:TotpSecrets:{uid:N}"],input.Code,DateTimeOffset.UtcNow);
-        if(uid is not {} id || password==PasswordVerificationResult.Failed || !IsAdmin(config,id) || step is null)return Error("Acceso no válido. Comprueba credenciales, código y autorización.",401);
-        var accepted=await Database.Scalar(c,ct,"""
-            INSERT INTO platform_totp_usage(user_id,last_step) VALUES($1,$2)
-            ON CONFLICT(user_id) DO UPDATE SET last_step=EXCLUDED.last_step
-            WHERE platform_totp_usage.last_step<EXCLUDED.last_step RETURNING user_id
-            """,id,step.Value);
-        if(accepted is null)return Error("Este código ya se usó. Espera al siguiente código.",401);
+        if(uid is not {} id || password==PasswordVerificationResult.Failed || !IsAdmin(config,id))return Error("Acceso no válido. Comprueba credenciales y autorización.",401);
         var token=Tokens.New();var expiry=DateTimeOffset.UtcNow.AddMinutes(30);
         await Database.Execute(c,ct,"DELETE FROM platform_sessions WHERE expires_at<now()");
         await Database.Execute(c,ct,"INSERT INTO platform_sessions(token_hash,user_id,expires_at) VALUES($1,$2,$3)",Tokens.Hash(token),id,expiry);

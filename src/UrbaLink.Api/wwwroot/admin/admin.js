@@ -19,7 +19,7 @@ function pager(data,load,offset){const bar=el('div',undefined,'actions');if(offs
 function decide(title,help,path,state,after){$('decision-title').textContent=title;$('decision-help').textContent=help;$('reason').value='';action=async()=>{await api(path,'POST',{state,reason:$('reason').value.trim()});$('decision').close();await after();};$('decision').showModal();$('reason').focus();}
 $('cancel-decision').onclick=()=>$('decision').close();
 $('decision-form').onsubmit=e=>{e.preventDefault();run(action);};
-$('login-form').onsubmit=e=>{e.preventDefault();run(async()=>{const input={email:$('email').value,password:$('password').value,code:$('code').value};$('password').value='';$('code').value='';const result=await api('/session','POST',input);token=result.token;expiresAt=Date.parse(result.expiresAt);$('login').hidden=true;$('workspace').hidden=false;$('logout').hidden=false;await communities();});};
+$('login-form').onsubmit=e=>{e.preventDefault();run(async()=>{const input={email:$('email').value,password:$('password').value};$('password').value='';const result=await api('/session','POST',input);token=result.token;expiresAt=Date.parse(result.expiresAt);$('login').hidden=true;$('workspace').hidden=false;$('logout').hidden=false;await communities();});};
 $('logout').onclick=()=>run(async()=>{try{await api('/session','DELETE');}finally{reset();}});
 $('communities-tab').onclick=()=>run(()=>communities());$('reports-tab').onclick=()=>run(()=>reports());$('audit-tab').onclick=()=>run(()=>audit());
 async function communities(offset=0,search=''){

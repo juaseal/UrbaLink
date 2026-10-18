@@ -204,12 +204,12 @@ dotnet build src/UrbaLink.Mobile/UrbaLink.Mobile.csproj `
 if ($LASTEXITCODE -ne 0) { throw 'No se ha podido generar el APK.' }
 
 $apk = '.artifacts/pilot-apk/bin/UrbaLink.Mobile/debug_net10.0-android_android-arm64/com.urbalink.mobile-Signed.apk'
-$installer = '.artifacts/pilot-apk/UrbaLink-1.0.1-pruebas-arm64.apk'
+$installer = '.artifacts/pilot-apk/UrbaLink-1.0.2-pruebas-arm64.apk'
 Copy-Item -LiteralPath $apk -Destination $installer
 Get-Item -LiteralPath $installer
 ```
 
-El instalador queda en `.artifacts/pilot-apk/UrbaLink-1.0.1-pruebas-arm64.apk`.
+El instalador queda en `.artifacts/pilot-apk/UrbaLink-1.0.2-pruebas-arm64.apk`.
 La carpeta `.artifacts` está excluida de Git. Es una compilación **Debug para
 pruebas**, firmada con la clave de depuración del equipo, para móviles Android
 ARM de 64 bits. `EmbedAssembliesIntoApk=true` incluye los ensamblados en el APK:
@@ -492,7 +492,7 @@ visualmente en un dispositivo Android el formulario, selección de foto y navega
 La API incluye un panel en **`/admin/`** para el operador de UrbaLink: aprobación
  y suspensión de comunidades, consulta de miembros, bloqueos, moderación de contenido,
 denuncias e historial de actuaciones. El acceso requiere un UUID autorizado en el
-servidor, contraseña y código de autenticador; no se concede por crear una comunidad.
+servidor y contraseña; no se concede por crear una comunidad.
 
 La migración **013** conserva las comunidades existentes como activas y exige aprobación
 para nuevas comunidades. La app muestra el estado pendiente e incorpora **Denunciar**
@@ -501,7 +501,7 @@ Solo los participantes pueden denunciar un mensaje y solo ese mensaje se compart
 con el equipo de plataforma. El panel no ofrece lectura general de chats privados.
 
 Consulta [DEPLOYMENT.md](DEPLOYMENT.md#panel-web-de-administración-de-la-plataforma)
-para activar tu cuenta y configurar el segundo factor en Railway. El panel se despliega
+para autorizar tu cuenta en Railway. El panel se despliega
 con la API; los botones de denuncia requieren actualizar el APK.
 
     pwsh -File scripts/Test-Posts.ps1 -Suite platform

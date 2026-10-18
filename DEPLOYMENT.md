@@ -106,36 +106,29 @@ están protegidos en el servidor con sesiones administrativas independientes.
 
        SELECT id, name, email FROM users WHERE email = 'tu-correo@example.com';
 
-2. En las variables del servicio **API**, añade:
+2. En las variables del servicio **API**, configura:
 
    | Variable | Valor |
    | --- | --- |
    | `PlatformAdmin__UserIds` | UUID de tu usuario (varios operadores, separados por comas) |
-   | `PlatformAdmin__TotpSecrets__UUID` | Clave TOTP individual de ese operador |
    | `Communities__RequireApproval` | `true` (también es el comportamiento predeterminado) |
 
-   En el nombre de la segunda variable, reemplaza `UUID` por el mismo identificador
-   en minúsculas, **sin guiones** (32 caracteres). En `PlatformAdmin__UserIds` sí se usa el UUID habitual con guiones. No hay una cuenta ni una contraseña predeterminada.
-   Crear una comunidad no concede permisos de plataforma.
+   Usa el UUID habitual con guiones. No hay una cuenta ni una contraseña
+   predeterminada. Crear una comunidad no concede permisos de plataforma.
 
-3. Genera una clave nueva en tu propio equipo con PowerShell 7:
-
-       pwsh -File scripts/New-PlatformTotp.ps1 -UserId UUID
-
-   El script muestra la clave **solo en tu terminal**; no la escribe en archivos.
-   Añádela manualmente a tu autenticador (TOTP, 6 dígitos, SHA-1, 30 segundos)
-   y a la variable correspondiente de Railway. No uses la clave de las pruebas,
-   no pegues la clave en chats ni la subas al repositorio.
-
-4. Conserva el pre-deploy habitual:
+3. Conserva el pre-deploy habitual:
 
        dotnet UrbaLink.Api.dll --Database:MigrateOnly=true
 
-   Despliega el commit con la migración **013** y verifica `/health/ready`.
-   Abre `/admin/` e introduce tu correo, contraseña de UrbaLink y código del
-   autenticador. La sesión dura 30 minutos; se guarda solo en memoria de la
-   pestaña. Recargar la página requiere entrar de nuevo. Un código ya utilizado
-   no se puede reutilizar; espera al siguiente. El reloj del móvil debe estar sincronizado.
+   Despliega el código actualizado y verifica `/health/ready`. Abre `/admin/`
+   e introduce tu correo y contraseña de UrbaLink. No se requiere autenticador.
+   La sesión dura 30 minutos y se guarda solo en memoria de la pestaña.
+   Recargar la página requiere entrar de nuevo.
+
+   Si configuraste variables `PlatformAdmin__TotpSecrets__...` con una versión
+   anterior, puedes eliminarlas del servicio API: ya no se utilizan. La migración
+   013 se conserva intacta; su tabla heredada `platform_totp_usage` queda sin uso
+   y no hace falta aplicar una migración nueva para este cambio.
 
 ### Qué permite el panel
 
@@ -156,7 +149,7 @@ administrador activo de una comunidad; se puede suspender la comunidad cuando pr
 La suspensión global de una cuenta puede afectar al único administrador de sus comunidades.
 Las cuentas globales autorizadas se protegen de suspensión desde el propio panel;
 para revocar a un operador, elimina su UUID de `PlatformAdmin__UserIds` y despliega
-la nueva configuración. Para recuperar el segundo factor, genera y configura una clave nueva.
+la nueva configuración.
 
 ### Privacidad y denuncias
 
@@ -179,6 +172,6 @@ Los clientes anteriores pueden mostrar un error genérico al abrir una comunidad
     pwsh -File scripts/Test-Posts.ps1 -Suite platform
 
 La suite utiliza una base temporal y configuración ficticia exclusiva de pruebas.
-Comprueba acceso, doble factor y repetición de códigos, aprobación, moderación,
+Comprueba acceso con contraseña y autorización global, aprobación, moderación,
 privacidad, bloqueos, auditoría y persistencia tras reiniciar. Las suites anteriores
 usan `Communities__RequireApproval=false` solo dentro de sus procesos de prueba.

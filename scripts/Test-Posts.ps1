@@ -47,7 +47,6 @@ try {
     $start.Environment['Communities__RequireApproval'] = if($Suite -eq 'platform'){'true'}else{'false'}
     if($Suite -eq 'platform') {
         $start.Environment['PlatformAdmin__UserIds'] = 'a7de3348-1f21-49c2-af1e-852d2d905541'
-        $start.Environment['PlatformAdmin__TotpSecrets__a7de33481f2149c2af1e852d2d905541'] = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'
     }
     $start.Environment['ASPNETCORE_URLS'] = $url
     $start.Environment['ConnectionStrings__UrbaLink'] = $connection.ConnectionString

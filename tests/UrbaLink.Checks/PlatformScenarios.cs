@@ -2,8 +2,6 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Security.Cryptography;
-using System.Buffers.Binary;
 using Npgsql;
 using UrbaLink.Contracts;
 
@@ -32,13 +30,12 @@ internal static class PlatformScenarios
         await using var db=new NpgsqlConnection(Environment.GetEnvironmentVariable("URBALINK_TEST_CONNECTION"));await db.OpenAsync();
         await using(var cmd=new NpgsqlCommand("DELETE FROM sessions WHERE user_id=$1;",db)){cmd.Parameters.AddWithValue(registered.Account.Id);await cmd.ExecuteNonQueryAsync();}
         await using(var cmd=new NpgsqlCommand("UPDATE users SET id=$1 WHERE id=$2",db)){cmd.Parameters.AddWithValue(fixedId);cmd.Parameters.AddWithValue(registered.Account.Id);await cmd.ExecuteNonQueryAsync();}
-        string Code(long step){var bytes=new byte[8];BinaryPrimitives.WriteInt64BigEndian(bytes,step);var hash=HMACSHA1.HashData(System.Text.Encoding.ASCII.GetBytes("12345678901234567890"),bytes);return ((BinaryPrimitives.ReadInt32BigEndian(hash.AsSpan(hash[^1]&15,4))&0x7fffffff)%1000000).ToString("D6");}
-        var login=new{email=registered.Account.Email,password="Platform-test-password-123",code=Code(DateTimeOffset.UtcNow.ToUnixTimeSeconds()/30)};
+        var login=new{email=registered.Account.Email,password="Platform-test-password-123"};
         await Expect(await owner.GetAsync("api/platform/communities"),HttpStatusCode.Unauthorized);
-        await Expect(await platform.PostAsJsonAsync("api/platform/session",login with{code="000000"}),HttpStatusCode.Unauthorized);
+        await Expect(await platform.PostAsJsonAsync("api/platform/session",login with{password="Incorrect-password-123"}),HttpStatusCode.Unauthorized);
         var auth=await Post<JsonElement>(platform,"api/platform/session",login);
         platform.DefaultRequestHeaders.Authorization=new AuthenticationHeaderValue("Bearer",auth.GetProperty("token").GetString());
-        await Expect(await platform.PostAsJsonAsync("api/platform/session",login),HttpStatusCode.Unauthorized);
+        await Expect(await owner.PostAsJsonAsync("api/platform/session",new{email=users[0].Account.Email,password="Platform-test-password-123"}),HttpStatusCode.Unauthorized);
         var community=await Post<CommunityDto>(owner,"api/communities",new CreateCommunityRequest("Comunidad pendiente"));
         Check(community.State=="Pending","No exige aprobación");
         await Expect(await owner.GetAsync($"api/communities/{community.Id}/overview"),HttpStatusCode.Forbidden);
@@ -99,7 +96,7 @@ internal static class PlatformScenarios
         using(var response=await owner.GetAsync("admin/")){Check(response.IsSuccessStatusCode,"Panel no servido");Check(response.Headers.Contains("Content-Security-Policy"),"Falta CSP");}
         await Expect(await platform.DeleteAsync("api/platform/session"),HttpStatusCode.NoContent);
         await Expect(await platform.GetAsync("api/platform/communities"),HttpStatusCode.Unauthorized);
-        Console.WriteLine("OK: panel, MFA y repetición, aprobación, moderación, denuncias, privacidad, bloqueos, auditoría y cierre de sesión.");
+        Console.WriteLine("OK: panel, contraseña y autorización global, aprobación, moderación, denuncias, privacidad, bloqueos, auditoría y cierre de sesión.");
     }
 }
 
