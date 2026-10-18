@@ -23,6 +23,7 @@ foreach (var item in cases)
 }
 Console.WriteLine($"OK: {cases.Length} comprobaciones de direcciones.");
 
+if (args.Length == 2 && args[1] == "platform") { await PlatformScenarios.Run(args[0]); return; }
 if (args.Length == 2 && args[1] == "animals") { await AnimalScenarios.Run(args[0]); return; }
 if (args.Length == 2 && args[1] == "services") { await ServiceScenarios.Run(args[0]); return; }
 if (args.Length == 2 && args[1] == "architecture") { await ArchitectureScenarios.Run(args[0]); return; }

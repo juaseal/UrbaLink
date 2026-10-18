@@ -50,6 +50,7 @@ public sealed class ServicePage : ContentPage
         body.Add(Text(service.Title, 26));
         body.Add(Text($"Ofrecido por {service.AuthorName}", 14));
         body.Add(Text(service.Body));
+        body.Add(Action("Denunciar publicación",()=>Navigation.PushAsync(new ReportPage(api,community.Id,"Post",postId,expired))));
         body.Add(Text("Contacto privado", 21));
         body.Add(Text("Cada interesado tiene su propia conversación con quien ofrece el servicio. Solo vosotros dos podéis leerla.", 14));
         if (service.AuthorId != userId)

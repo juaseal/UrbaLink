@@ -227,12 +227,13 @@ public sealed class AccountPage : ContentPage
         var current = communities.FirstOrDefault(c => c.Id == selectedCommunity) ?? communities.FirstOrDefault();
         selectedCommunity = current?.Id;
         if (current is not null) Preferences.Default.Set(storageKey + "_community", current.Id.ToString());
-        CommunityOverview? overview = current is not null && section != "Perfil"
+        CommunityOverview? overview = current is not null && current.State=="Active" && section != "Perfil"
             ? await Send<CommunityOverview>(HttpMethod.Get, $"api/communities/{current.Id}/overview") : null;
         body.Clear();
         SetTabs();
         if (section == "Perfil") { ShowProfile(); return; }
         body.Add(Text($"Hola, {account!.Name}"));
+
         if (current is null)
         {
             body.Add(Heading("Tu comunidad empieza aquí."));
@@ -249,6 +250,7 @@ public sealed class AccountPage : ContentPage
                 await Run(async () => { selectedCommunity = chosen.Id; await ShowCommunities(); });
         };
         body.Add(selector);
+        if(current.State!="Active"){body.Add(Text(current.State=="Pending"?"Tu solicitud está pendiente de aprobación por UrbaLink.":"Esta urbanización está suspendida por UrbaLink."));body.Add(Action("Actualizar estado",ShowCommunities));return;}
         var hero = new VerticalStackLayout { Spacing = 12 };
         hero.Add(new Label { Text = "CERCA DE TI", FontSize = 11, CharacterSpacing = 2, TextColor = Color.FromArgb("#C6E8D6") });
         hero.Add(new Label { Text = "La vida en tu urba,\nun poco más fácil.", FontSize = 29, FontAttributes = FontAttributes.Bold, TextColor = Colors.White });
@@ -287,6 +289,7 @@ public sealed class AccountPage : ContentPage
 
     private void AddNeeds(CommunityDto current, CommunityOverview overview)
     {
+        body.Add(Action("Denunciar comunidad",()=>Navigation.PushAsync(new ReportPage(api,current.Id,"Community",0,Expired))));
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitionCollection { new(GridLength.Star),new(GridLength.Star) },
             RowDefinitions = new RowDefinitionCollection { new(GridLength.Auto),new(GridLength.Auto) }, ColumnSpacing = 12, RowSpacing = 12 };
         var choices = new[] {
@@ -321,9 +324,10 @@ public sealed class AccountPage : ContentPage
             var content = new VerticalStackLayout { Spacing=10 };
             content.Add(Heading(community.Name,20));
             content.Add(Text(community.Role == "Admin" ? "Administrador" : "Vecino"));
+            if(community.State!="Active")content.Add(Text(community.State=="Pending"?"Pendiente de aprobación por UrbaLink":"Suspendida por UrbaLink"));
             content.Add(Action(community.Role == "Admin" ? "Administrar comunidad" : "Ir al inicio", async () =>
             {
-                if (community.Role == "Admin") ShowManage(community);
+                if (community.Role == "Admin" && community.State=="Active") ShowManage(community);
                 else { selectedCommunity=community.Id; section="Inicio"; await ShowCommunities(); }
             }));
             body.Add(Card(content));
@@ -356,7 +360,7 @@ public sealed class AccountPage : ContentPage
     private void ShowCreate()
     {
         body.Clear(); body.Add(Heading("Un lugar para tu urba"));
-        body.Add(Text("Crearás una nueva comunidad y serás su administrador."));
+        body.Add(Text("Solicitarás una nueva comunidad. UrbaLink debe aprobarla antes de que puedas invitar vecinos y publicar."));
         var name=Input("Nombre de la comunidad");
         body.Add(name);
         body.Add(Action("Crear comunidad",async () => {

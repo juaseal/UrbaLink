@@ -200,6 +200,7 @@ public sealed class MarketPage : ContentPage
             }); header.Add(menu,1,0);
         }
         body.Add(header); body.Add(Label(item.Title,28,true)); body.Add(Label(Price(item),25,true));
+        body.Add(Button("Denunciar objeto",()=>Navigation.PushAsync(new ReportPage(api,community.Id,"Item",item.Id,expired)),true));
         body.Add(Label(item.Description)); body.Add(Label($"Lo ofrece {item.OwnerName}",13));
         body.Add(Label("Pago y entrega acordados entre vecinos. La app no realiza cobros.",12));
         if(item.Mode=="Auction")

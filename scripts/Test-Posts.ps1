@@ -1,4 +1,4 @@
-param([ValidateSet('posts', 'comments', 'lifecycle', 'market', 'rides', 'services', 'architecture', 'accounts', 'animals')][string]$Suite = 'posts')
+param([ValidateSet('posts', 'comments', 'lifecycle', 'market', 'rides', 'services', 'architecture', 'accounts', 'animals', 'platform')][string]$Suite = 'posts', [switch]$Preview)
 # Requires PowerShell 7, Docker Desktop and the project's local PostgreSQL container.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -44,6 +44,11 @@ try {
     $start.CreateNoWindow = $true
     $start.WorkingDirectory = Join-Path $root 'src/UrbaLink.Api'
     $start.Environment['ASPNETCORE_ENVIRONMENT'] = 'Development'
+    $start.Environment['Communities__RequireApproval'] = if($Suite -eq 'platform'){'true'}else{'false'}
+    if($Suite -eq 'platform') {
+        $start.Environment['PlatformAdmin__UserIds'] = 'a7de3348-1f21-49c2-af1e-852d2d905541'
+        $start.Environment['PlatformAdmin__TotpSecrets__a7de33481f2149c2af1e852d2d905541'] = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'
+    }
     $start.Environment['ASPNETCORE_URLS'] = $url
     $start.Environment['ConnectionStrings__UrbaLink'] = $connection.ConnectionString
     $start.Environment['Logging__LogLevel__Default'] = 'Warning'
@@ -71,16 +76,20 @@ try {
         }
         if (!$ready) { throw 'La API no quedó lista.' }
         if ($run -eq 0) {
-            if ($Suite -in @('market', 'architecture', 'accounts', 'animals')) { $env:URBALINK_TEST_CONNECTION = $connection.ConnectionString }
+            if ($Suite -in @('market', 'architecture', 'accounts', 'animals', 'platform')) { $env:URBALINK_TEST_CONNECTION = $connection.ConnectionString }
             & dotnet $checks $url $Suite
             if ($LASTEXITCODE -ne 0) { throw 'Fallaron las pruebas del tablón.' }
-            $countBefore = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM users) + (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM market_items) + (SELECT count(*) FROM market_bids) + (SELECT count(*) FROM market_messages) + (SELECT count(*) FROM animal_notices) + (SELECT count(*) FROM animal_notice_history)'
+            $countBefore = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM users) + (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM market_items) + (SELECT count(*) FROM market_bids) + (SELECT count(*) FROM market_messages) + (SELECT count(*) FROM animal_notices) + (SELECT count(*) FROM animal_notice_history) + (SELECT count(*) FROM moderation_reports) + (SELECT count(*) FROM platform_audit)'
         } else {
-            $countAfter = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM users) + (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM market_items) + (SELECT count(*) FROM market_bids) + (SELECT count(*) FROM market_messages) + (SELECT count(*) FROM animal_notices) + (SELECT count(*) FROM animal_notice_history)'
+            $countAfter = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM users) + (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM market_items) + (SELECT count(*) FROM market_bids) + (SELECT count(*) FROM market_messages) + (SELECT count(*) FROM animal_notices) + (SELECT count(*) FROM animal_notice_history) + (SELECT count(*) FROM moderation_reports) + (SELECT count(*) FROM platform_audit)'
             if ($countBefore -ne $countAfter -or [int]$countAfter -lt 1) { throw 'Se perdieron publicaciones al reiniciar.' }
             $versions = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT count(*) FROM schema_versions'
             if ([int]$versions -ne @(Get-ChildItem (Join-Path $root 'src/UrbaLink.Api/Data') -Filter '*.sql').Count) { throw 'Migraciones inesperadas.' }
             Write-Output 'OK: persistencia y migraciones idempotentes tras reiniciar.'
+        }
+        if($Preview -and $Suite -eq 'platform' -and $run -eq 1) {
+            Write-Output "Panel de pruebas disponible en $url/admin/"
+            Read-Host 'Pulsa Entrar para cerrar la vista previa y eliminar la base temporal' | Out-Null
         }
         $process.Kill()
         $process.WaitForExit()

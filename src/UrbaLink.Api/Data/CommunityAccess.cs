@@ -10,7 +10,7 @@ internal static class CommunityAccess
     {
         await using var command = Database.Command(connection, """
             SELECT m.role FROM communities c JOIN memberships m ON m.community_id=c.id
-            WHERE c.id=$1 AND c.deleted_at IS NULL AND m.user_id=$2 FOR SHARE OF c
+            WHERE c.id=$1 AND c.deleted_at IS NULL AND c.platform_state='Active' AND NOT m.is_blocked AND m.user_id=$2 FOR SHARE OF c
             """, communityId, userId);
         return await command.ExecuteScalarAsync(ct) as string;
     }
@@ -18,7 +18,7 @@ internal static class CommunityAccess
     public static async Task<string?> LockActive(NpgsqlConnection connection, Guid communityId, CancellationToken ct)
     {
         await using var command = Database.Command(connection,
-            "SELECT name FROM communities WHERE id=$1 AND deleted_at IS NULL FOR SHARE", communityId);
+            "SELECT name FROM communities WHERE id=$1 AND deleted_at IS NULL AND platform_state='Active' FOR SHARE", communityId);
         return await command.ExecuteScalarAsync(ct) as string;
     }
 }

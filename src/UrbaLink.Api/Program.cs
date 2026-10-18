@@ -47,8 +47,22 @@ if (!app.Environment.IsDevelopment())
     // Internal readiness probes have no forwarded HTTPS headers.
     app.UseWhen(context => !context.Request.Path.StartsWithSegments("/health"),
         pipeline => pipeline.UseHttpsRedirection());
+app.Use(async(context,next)=>
+{
+    if(context.Request.Path.StartsWithSegments("/admin") || context.Request.Path.StartsWithSegments("/api/platform"))
+    {
+        context.Response.Headers.CacheControl="no-store";
+        context.Response.Headers["Content-Security-Policy"]="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+        context.Response.Headers["X-Content-Type-Options"]="nosniff";
+        context.Response.Headers["Referrer-Policy"]="no-referrer";
+    }
+    await next();
+});
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseMiddleware<RequestAdmission>();
 app.UseAuthentication();
+app.UseMiddleware<PlatformAccessGate>();
 app.UseRateLimiter();
 app.UseAuthorization();
 
@@ -70,6 +84,8 @@ if (app.Services.GetService<NpgsqlDataSource>() is { } database)
     app.MapNotifications();
     app.MapRides();
     app.MapAnimalNotices();
+    app.MapPlatform();
+    app.MapReports();
 }
 
 app.MapGet("/health/live", () => Results.Ok(

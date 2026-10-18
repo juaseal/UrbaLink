@@ -30,7 +30,7 @@ public sealed class SessionAuthentication(
         await using var connection = await source.OpenConnectionAsync(Context.RequestAborted);
         var tokenHash = Tokens.Hash(token);
         await using var command = Database.Command(connection,
-            "SELECT user_id,expires_at <= clock_timestamp()+$2 FROM sessions WHERE token_hash=$1 AND expires_at > clock_timestamp()",
+            "SELECT user_id,expires_at <= clock_timestamp()+$2 FROM sessions WHERE token_hash=$1 AND expires_at > clock_timestamp() AND EXISTS(SELECT 1 FROM users u WHERE u.id=sessions.user_id AND NOT u.is_suspended)",
             tokenHash, SessionPolicy.RenewBelow);
         Guid userId;
         bool renew;

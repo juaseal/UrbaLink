@@ -76,6 +76,7 @@ public sealed class AnimalsPage : ContentPage
         body.Add(Text($"{n.Location} · {n.OccurredAt.LocalDateTime:g}"));body.Add(Text(n.Description));
         if(n.Kind=="Found")body.Add(Text(n.IsWithReporter?"Está con quien lo encontró":"Visto en la zona"));
         body.Add(Text("Publicado por "+n.AuthorName));
+        body.Add(Action("Denunciar aviso",()=>Navigation.PushAsync(new ReportPage(api,community.Id,"Animal",n.Id,expired))));
         body.Add(Text("Usa el chat privado para comunicar avistamientos o acordar la entrega. No publiques teléfonos ni direcciones exactas.",14));
         if(n.Status=="Active" && n.AuthorId!=userId)body.Add(Action("Contactar en privado",async()=>
         {
@@ -132,4 +133,3 @@ public sealed class AnimalsPage : ContentPage
         {if(await DisplayAlertAsync("¿Descartar los cambios?","Los datos sin guardar se perderán.","Descartar","Seguir editando"))await Load();}));
     }
 }
-

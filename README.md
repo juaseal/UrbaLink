@@ -486,3 +486,22 @@ Cubren pérdida, hallazgo, fotografía, contacto, campana, lectura, recuperació
 privacidad incluso frente a administradores, aislamiento, reintentos concurrentes,
 edición obsoleta, paginación y persistencia tras reiniciar. Antes de distribuir, revisar
 visualmente en un dispositivo Android el formulario, selección de foto y navegación.
+
+## Administración web de plataforma
+
+La API incluye un panel en **`/admin/`** para el operador de UrbaLink: aprobación
+ y suspensión de comunidades, consulta de miembros, bloqueos, moderación de contenido,
+denuncias e historial de actuaciones. El acceso requiere un UUID autorizado en el
+servidor, contraseña y código de autenticador; no se concede por crear una comunidad.
+
+La migración **013** conserva las comunidades existentes como activas y exige aprobación
+para nuevas comunidades. La app muestra el estado pendiente e incorpora **Denunciar**
+en comunidades, publicaciones, comentarios, objetos, animales y mensajes privados.
+Solo los participantes pueden denunciar un mensaje y solo ese mensaje se comparte
+con el equipo de plataforma. El panel no ofrece lectura general de chats privados.
+
+Consulta [DEPLOYMENT.md](DEPLOYMENT.md#panel-web-de-administración-de-la-plataforma)
+para activar tu cuenta y configurar el segundo factor en Railway. El panel se despliega
+con la API; los botones de denuncia requieren actualizar el APK.
+
+    pwsh -File scripts/Test-Posts.ps1 -Suite platform

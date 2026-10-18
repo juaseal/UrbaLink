@@ -37,6 +37,7 @@ public sealed class CommentsPage : ContentPage
         this.userId = userId;
         this.sessionExpired = sessionExpired;
         Title = "Comentarios";
+        ToolbarItems.Add(new ToolbarItem{Text="Denunciar publicación",Command=new Command(async()=>await Navigation.PushAsync(new ReportPage(api,community.Id,"Post",postId,sessionExpired)))});
         BackgroundColor = Color.FromArgb("#F4F7F6");
         draft.TextChanged += (_, _) => requestId = Guid.NewGuid();
         send.Clicked += async (_, _) => await Run(SendComment);
@@ -162,6 +163,7 @@ public sealed class CommentsPage : ContentPage
         header.Add(name);
         content.Add(header);
         content.Add(Text(item.Body));
+        var report=new Button{Text="Denunciar comentario"}; report.Clicked+=async(_,_)=>await Navigation.PushAsync(new ReportPage(api,community.Id,"Comment",item.Id,sessionExpired));content.Add(report);
         content.Add(Text(item.CreatedAt.LocalDateTime.ToString("g"), 12));
         var card = new Border
         {

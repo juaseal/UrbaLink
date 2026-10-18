@@ -41,7 +41,7 @@ public sealed class ConversationPage : ContentPage
         var layout=new Grid { RowDefinitions=new RowDefinitionCollection {new(GridLength.Auto),new(GridLength.Star),new(GridLength.Auto)} };
         var header=new VerticalStackLayout {Padding=new Thickness(16,8),Spacing=4};
         header.Add(new Label {Text=subject,FontSize=19,FontAttributes=FontAttributes.Bold,TextColor=Color.FromArgb("#16352C")});
-        header.Add(new Label {Text="Solo vosotros dos podéis leer esta conversación.",FontSize=12,TextColor=Color.FromArgb("#52665F")});
+        header.Add(new Label {Text="Conversación privada. Puedes denunciar un mensaje concreto al equipo de UrbaLink.",FontSize=12,TextColor=Color.FromArgb("#52665F")});
         header.Add(refresh);layout.Add(header);
         scroll=new ScrollView {Content=messages};layout.Add(scroll,0,1);
         var composer=new VerticalStackLayout {Padding=12,Spacing=6,Children={feedback,draft,send}};layout.Add(composer,0,2);
@@ -89,6 +89,7 @@ public sealed class ConversationPage : ContentPage
             var mine=message.AuthorId==userId;
             var content=new VerticalStackLayout {Spacing=5};
             content.Add(new Label {Text=message.Body,FontSize=16,TextColor=Color.FromArgb("#16352C")});
+            var report=new Button{Text="Denunciar mensaje",FontSize=12};report.Clicked+=async(_,_)=>await Run(()=>Navigation.PushAsync(new ReportPage(api,Guid.Parse(path.Split('/' )[2]),"Message",message.Id,expired)));content.Add(report);
             content.Add(new Label {Text=$"{message.Name} · {message.CreatedAt.LocalDateTime:g}",FontSize=11,TextColor=Color.FromArgb("#52665F")});
             messages.Add(new Border {Content=content,Padding=12,Margin=mine?new Thickness(28,0,0,0):new Thickness(0,0,28,0),
                 BackgroundColor=Color.FromArgb(mine?"#E4F1EA":"#FFFFFF"),Stroke=Colors.Transparent,

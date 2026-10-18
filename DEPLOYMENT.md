@@ -91,3 +91,94 @@ Fuentes: [Dockerfiles](https://docs.railway.com/builds/dockerfiles),
 [Pre-deploy](https://docs.railway.com/deployments/pre-deploy-command),
 [Red pública y cabeceras](https://docs.railway.com/networking/public-networking/specs-and-limits),
 [Configuración del despliegue](https://docs.railway.com/config-as-code/reference).
+
+## Panel web de administración de la plataforma
+
+El panel se sirve con la API, en `/admin/` (por ejemplo,
+`https://urbalink-production.up.railway.app/admin/`). No necesita otro servicio
+ni otro despliegue. El código HTML de acceso es público; todos los datos y acciones
+están protegidos en el servidor con sesiones administrativas independientes.
+
+### Activar la primera cuenta
+
+1. Usa una cuenta ya registrada de UrbaLink. En PostgreSQL de Railway, consulta
+   su identificador, sustituyendo el correo por el tuyo:
+
+       SELECT id, name, email FROM users WHERE email = 'tu-correo@example.com';
+
+2. En las variables del servicio **API**, añade:
+
+   | Variable | Valor |
+   | --- | --- |
+   | `PlatformAdmin__UserIds` | UUID de tu usuario (varios operadores, separados por comas) |
+   | `PlatformAdmin__TotpSecrets__UUID` | Clave TOTP individual de ese operador |
+   | `Communities__RequireApproval` | `true` (también es el comportamiento predeterminado) |
+
+   En el nombre de la segunda variable, reemplaza `UUID` por el mismo identificador
+   en minúsculas, **sin guiones** (32 caracteres). En `PlatformAdmin__UserIds` sí se usa el UUID habitual con guiones. No hay una cuenta ni una contraseña predeterminada.
+   Crear una comunidad no concede permisos de plataforma.
+
+3. Genera una clave nueva en tu propio equipo con PowerShell 7:
+
+       pwsh -File scripts/New-PlatformTotp.ps1 -UserId UUID
+
+   El script muestra la clave **solo en tu terminal**; no la escribe en archivos.
+   Añádela manualmente a tu autenticador (TOTP, 6 dígitos, SHA-1, 30 segundos)
+   y a la variable correspondiente de Railway. No uses la clave de las pruebas,
+   no pegues la clave en chats ni la subas al repositorio.
+
+4. Conserva el pre-deploy habitual:
+
+       dotnet UrbaLink.Api.dll --Database:MigrateOnly=true
+
+   Despliega el commit con la migración **013** y verifica `/health/ready`.
+   Abre `/admin/` e introduce tu correo, contraseña de UrbaLink y código del
+   autenticador. La sesión dura 30 minutos; se guarda solo en memoria de la
+   pestaña. Recargar la página requiere entrar de nuevo. Un código ya utilizado
+   no se puede reutilizar; espera al siguiente. El reloj del móvil debe estar sincronizado.
+
+### Qué permite el panel
+
+- Buscar urbanizaciones, revisar sus miembros y aprobar, suspender o reactivar comunidades.
+- Consultar nombres, correos, roles y estado de sus miembros.
+- Bloquear un miembro solo en una comunidad o suspender su cuenta en toda la plataforma.
+  La suspensión global revoca sus sesiones; al reactivarla tendrá que iniciar sesión.
+- Revisar publicaciones, comentarios, objetos y avisos de animales, y retirarlos con motivo.
+- Atender denuncias con copia del contenido señalado, resolverlas o descartarlas con motivo.
+- Consultar el historial de accesos a información sensible y de medidas administrativas.
+
+Las comunidades existentes quedan **activas** al aplicar la migración; las nuevas
+quedan **pendientes** y no pueden invitar vecinos ni publicar hasta su aprobación.
+Archivar/restaurar una comunidad desde Android no revierte una suspensión de plataforma.
+Los bloqueos conservan la membresía e impiden volver a entrar con una invitación.
+Los cambios conservan los datos y quedan auditados. No se puede bloquear al último
+administrador activo de una comunidad; se puede suspender la comunidad cuando proceda.
+La suspensión global de una cuenta puede afectar al único administrador de sus comunidades.
+Las cuentas globales autorizadas se protegen de suspensión desde el propio panel;
+para revocar a un operador, elimina su UUID de `PlatformAdmin__UserIds` y despliega
+la nueva configuración. Para recuperar el segundo factor, genera y configura una clave nueva.
+
+### Privacidad y denuncias
+
+No existe una ruta de administración para leer chats completos. En la app actualizada,
+**Denunciar mensaje** envía solo el mensaje concreto que el participante señala, no
+el resto de la conversación. La API comprueba que ese usuario participe en el chat.
+El resto del contenido tiene **Denunciar publicación/comentario/objeto/aviso/comunidad**.
+Las denuncias se envían al equipo de plataforma, sin entregarlas a los administradores
+locales. El panel debe consultarse: esta versión no envía correo ni push al operador.
+Los textos se renderizan como texto y no como HTML; el panel utiliza CSP y no almacena
+credenciales ni tokens en localStorage. Las copias de denuncias y el registro administrativo
+se guardan para revisar las decisiones; no hay borrado permanente desde el panel.
+
+Necesitas un APK actualizado para mostrar los botones de denuncia y los estados de
+aprobación en Android. El servidor aplica las restricciones también a clientes anteriores.
+Los clientes anteriores pueden mostrar un error genérico al abrir una comunidad pendiente.
+
+### Pruebas
+
+    pwsh -File scripts/Test-Posts.ps1 -Suite platform
+
+La suite utiliza una base temporal y configuración ficticia exclusiva de pruebas.
+Comprueba acceso, doble factor y repetición de códigos, aprobación, moderación,
+privacidad, bloqueos, auditoría y persistencia tras reiniciar. Las suites anteriores
+usan `Communities__RequireApproval=false` solo dentro de sus procesos de prueba.

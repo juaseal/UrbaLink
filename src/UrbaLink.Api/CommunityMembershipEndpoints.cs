@@ -11,18 +11,18 @@ public static partial class CommunityEndpoints
         await using var connection = await source.OpenConnectionAsync(ct);
         await using var command = Database.Command(connection,
             """
-            SELECT c.id,c.name,m.role FROM communities c
-            JOIN active_memberships m ON m.community_id=c.id WHERE m.user_id=$1 ORDER BY c.name,c.id
+            SELECT c.id,c.name,m.role,c.platform_state FROM communities c
+            JOIN memberships m ON m.community_id=c.id WHERE m.user_id=$1 AND NOT m.is_blocked AND c.deleted_at IS NULL ORDER BY c.name,c.id
             """, Tokens.UserId(principal));
         var result = new List<CommunityDto>();
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
-            result.Add(new CommunityDto(reader.GetGuid(0), reader.GetString(1), reader.GetString(2)));
+            result.Add(new CommunityDto(reader.GetGuid(0), reader.GetString(1), reader.GetString(2),reader.GetString(3)));
         return Results.Ok(result);
     }
 
     private static async Task<IResult> CreateCommunity(CreateCommunityRequest request,
-        ClaimsPrincipal principal, NpgsqlDataSource source, CancellationToken ct)
+        ClaimsPrincipal principal, NpgsqlDataSource source, IConfiguration configuration, CancellationToken ct)
     {
         var name = request.Name?.Trim() ?? "";
         if (name.Length is < 2 or > 100) return Error("El nombre debe tener entre 2 y 100 caracteres.");
@@ -30,13 +30,13 @@ public static partial class CommunityEndpoints
         await using var connection = await source.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
         await using (var command = Database.Command(connection,
-            "INSERT INTO communities(id,name) VALUES ($1,$2)", id, name))
+            "INSERT INTO communities(id,name,platform_state) VALUES ($1,$2,$3)", id, name, configuration.GetValue("Communities:RequireApproval",true)?"Pending":"Active"))
             await command.ExecuteNonQueryAsync(ct);
         await using (var command = Database.Command(connection,
             "INSERT INTO memberships(user_id,community_id,role) VALUES ($1,$2,'Admin')", Tokens.UserId(principal), id))
             await command.ExecuteNonQueryAsync(ct);
         await transaction.CommitAsync(ct);
-        return Results.Ok(new CommunityDto(id, name, "Admin"));
+        return Results.Ok(new CommunityDto(id, name, "Admin", configuration.GetValue("Communities:RequireApproval",true)?"Pending":"Active"));
     }
 
     private static async Task<IResult> Invite(Guid id, ClaimsPrincipal principal, NpgsqlDataSource source, CancellationToken ct)

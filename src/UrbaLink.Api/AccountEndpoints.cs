@@ -76,7 +76,7 @@ public static class AccountEndpoints
         AccountDto? account = null;
         var hash = DummyHash;
         await using (var command = Database.Command(connection,
-            "SELECT id,name,email,password_hash FROM users WHERE email=$1", email))
+            "SELECT id,name,email,password_hash FROM users WHERE email=$1 AND NOT is_suspended", email))
         await using (var reader = await command.ExecuteReaderAsync(ct))
         {
             if (await reader.ReadAsync(ct))
