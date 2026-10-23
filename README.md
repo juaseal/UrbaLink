@@ -23,8 +23,9 @@ bandeja web. Incluye denuncias de contenido y mensajes, retirada de publicacione
 y comentarios por sus autores o administradores, e invitaciones para administradores
 locales. Las nuevas comunidades requieren la aprobación de plataforma habitual.
 
-Los catálogos y formularios completos de Objetos, Trayectos y Animales siguen en
-Android y quedan para la siguiente fase web. La campana de esta versión avisa de
+La web incluye Compraventa (venta, alquiler y subastas, fotos, pujas y contacto
+privado) y Animales (avisos de pérdida y hallazgo, edición, cierre y contacto).
+Los trayectos continúan disponibles en el filtro del tablón. La campana de esta versión avisa de
 mensajes privados; no hay push con el navegador cerrado ni avisos de comentarios.
 
 La sesión del navegador utiliza una cookie HttpOnly, SameSite=Strict y Secure en

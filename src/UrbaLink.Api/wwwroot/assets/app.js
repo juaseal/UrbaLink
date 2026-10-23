@@ -66,7 +66,7 @@ async function render(){
  if(parts[0]==='c'){
   const selected=communities.find(c=>c.id===parts[1]);if(!selected)throw new ApiError(403,'No tienes acceso a esta comunidad. Comprueba tu cuenta o entra con una invitación.');community=selected;rememberCommunity();updateSelector();
  }
- const section=parts[0]==='c'?(parts[2]==='chat'?'messages':'board'):parts[0];document.querySelectorAll('[data-nav]').forEach(a=>{if(a.dataset.nav===section)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
+ const section=parts[0]==='c'?(parts[2]==='chat'?'messages':parts[2]==='items'?'market':parts[2]==='animals'?'animals':'board'):parts[0];document.querySelectorAll('[data-nav]').forEach(a=>{if(a.dataset.nav===section)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
  if(section==='messages' && parts[0]!=='c'){await messages();return;}
  if(section==='profile'){profile();return;}
  if(section==='join'){join();return;}
@@ -75,6 +75,9 @@ async function render(){
  if(community.state!=='Active'){heading(community.name,community.state==='Pending'?'Tu comunidad está pendiente de aprobación por UrbaLink. Podrás invitar vecinos y publicar cuando se apruebe.':'Esta comunidad está suspendida por UrbaLink.');view.append(button('Actualizar estado',hydrate,'secondary'),link('Mi cuenta','profile','button ghost'));return;}
  if(parts[0]==='c' && parts[2]==='post' && /^\d+$/.test(parts[3])){await post(parts[3]);return;}
  if(parts[0]==='c' && parts[2]==='chat'){await conversation(parts);return;}
+ if(parts[0]==='c' && ['items','animals'].includes(parts[2]) && /^\d+$/.test(parts[3])){await catalogDetail(parts[2],parts[3]);return;}
+ if(section==='market'||section==='animals'){await catalog(section==='market'?'items':'animals',new URLSearchParams(route.split('?')[1]||''));return;}
+ if(section==='new-item'||section==='new-animal'){catalogForm(section==='new-item'?'items':'animals');return;}
  if(section==='board'){await board(new URLSearchParams(route.split('?')[1]||'').get('category'));return;}
  if(section==='new-post'){newPost();return;}
  await home();
@@ -82,7 +85,7 @@ async function render(){
 function welcome(){heading('Tu comunidad empieza aquí','Únete a tus vecinos con una invitación o solicita una nueva comunidad.');const actions=el('div',undefined,'actions');actions.append(link('Unirme con una invitación','join','button'),link('Solicitar comunidad','create-community'));view.append(actions);}
 async function home(){
  const data=await api(root()+'/overview');heading('Hola, '+account.name);const hero=el('section',undefined,'welcome'),copy=el('div');copy.append(text('LA VIDA EN TU URBA','eyebrow'),el('h1','Un poco más cerca de tus vecinos.'),text(`${data.memberCount} vecinos · ${data.activePosts} publicaciones`));hero.append(copy,link('＋ Compartir algo','new-post'));view.append(hero);
- const grid=el('div',undefined,'grid');const boardCard=card('Lo que pasa cerca de ti','Preguntas, novedades y conversaciones de tu comunidad.');boardCard.append(link('Abrir el tablón','board','button ghost'));const help=card('Ayuda y servicios','Encuentra una mano, ofrece lo que sabes y comparte recomendaciones.');help.append(link('Explorar ayuda','board?category='+encodeURIComponent('Ayuda y servicios'),'button ghost'));grid.append(boardCard,help);view.append(grid);
+ const grid=el('div',undefined,'grid');const boardCard=card('Lo que pasa cerca de ti','Preguntas, novedades y conversaciones de tu comunidad.');boardCard.append(link('Abrir el tablón','board','button ghost'));const help=card('Ayuda y servicios','Encuentra una mano, ofrece lo que sabes y comparte recomendaciones.');help.append(link('Explorar ayuda','board?category='+encodeURIComponent('Ayuda y servicios'),'button ghost'));const market=card('Compraventa','Objetos en venta, alquiler y subasta entre vecinos.');market.append(link('Explorar objetos','market','button ghost'));const animals=card('Animales','Avisos de perros y gatos perdidos o encontrados.');animals.append(link('Ver avisos','animals','button ghost'));grid.append(boardCard,help,market,animals);view.append(grid);
  const head=el('div',undefined,'section-head');head.append(el('h2','Últimas novedades'),link('Ver todas','board','button ghost'));view.append(head);
  if(!data.recent.length)view.append(empty('Todavía no hay publicaciones. Comparte la primera.'));for(const p of data.recent)view.append(postCard(p));
 }
@@ -123,7 +126,7 @@ async function post(id){
 }
 async function messages(){
  const data=await api('/api/conversations');heading('Tus mensajes','Conversaciones privadas de todas tus comunidades. Solo sus participantes pueden leerlas.');const list=el('div');view.append(list);
- const draw=items=>{for(const chat of items){const n=el('article',undefined,'message-card');n.append(el('h3',chat.otherName),text(chat.title),text(chat.lastMessage||'Todavía no hay mensajes.','preview'),text(chat.communityName,'muted'));if(chat.unreadCount)n.append(el('span',chat.unreadCount+' sin leer','badge'));n.append(link('Abrir conversación',`c/${chat.communityId}/chat/${chat.kind}/${chat.subjectId}/${chat.id}`,'button ghost'));list.append(n);}};draw(data.items);if(!data.items.length)list.append(empty('Aquí aparecerán tus conversaciones. Puedes contactar en privado desde una publicación de Servicios.'));
+ const draw=items=>{for(const chat of items){const n=el('article',undefined,'message-card');n.append(el('h3',chat.otherName),text(chat.title),text(chat.lastMessage||'Todavía no hay mensajes.','preview'),text(chat.communityName,'muted'));if(chat.unreadCount)n.append(el('span',chat.unreadCount+' sin leer','badge'));n.append(link('Abrir conversación',`c/${chat.communityId}/chat/${chat.kind}/${chat.subjectId}/${chat.id}`,'button ghost'));list.append(n);}};draw(data.items);if(!data.items.length)list.append(empty('Aquí aparecerán tus conversaciones. Puedes contactar en privado desde Servicios, Compraventa o Animales.'));
  let next=data.nextBefore;const more=button('Conversaciones anteriores',async()=>{const page=await api('/api/conversations?before='+next);draw(page.items);next=page.nextBefore;more.hidden=next===null;},'secondary');more.hidden=next===null;view.append(more,button('Actualizar mensajes',messages,'ghost'));
 }
 async function conversation(parts){
@@ -155,3 +158,47 @@ setInterval(()=>{if(!busy)refreshBell();},10000);document.addEventListener('visi
 async function boot(){try{account=await api('/api/me');}catch(e){if(e.status===401){login();return;}login();throw e;}await hydrate();}
 $('start-retry').onclick=()=>run(boot);
 await run(boot);
+
+function choice(f,title,values,value){const l=el('label',title),s=el('select');for(const [key,name]of values){const o=el('option',name);o.value=key;s.append(o);}if(value!==undefined)s.value=value;l.append(s);f.append(l);return s;}
+function money(cents){return new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(cents/100);}
+function catalogPhoto(host,photo,title){if(!photo)return;const img=el('img');img.src='data:image/jpeg;base64,'+photo;img.alt=title;img.className='catalog-photo';host.append(img);}
+function itemSummary(i){return ({Sale:'Venta',Rent:'Alquiler',Auction:'Subasta'}[i.mode]||i.mode)+' · '+money(i.highestBidCents??i.priceCents)+(i.period?' / '+({Hour:'hora',Day:'día',Week:'semana'}[i.period]):'')+' · '+({Active:i.isLent?'Prestado':'Disponible',Ended:'Subasta finalizada',Completed:'Completado',Withdrawn:'Retirado'}[i.state]||i.state);}
+async function catalog(segment,query=new URLSearchParams()){
+ const animal=segment==='animals',route=animal?'animals':'market';heading(animal?'Animales':'Compraventa',animal?'Ayuda a reunir perros y gatos perdidos con sus familias.':'Compra, vende, alquila y participa en subastas entre vecinos.');
+ view.append(link(animal?'＋ Publicar aviso':'＋ Publicar objeto',animal?'new-animal':'new-item','button'));
+ const filters=el('div',undefined,'filters'),options=animal?[['','Activos'],['closed=true','Cerrados']]:[['','Todos'],['mode=Sale','Venta'],['mode=Rent','Alquiler'],['mode=Auction','Subastas'],['scope=Mine','Mis objetos'],['scope=Activity','Mi actividad']];
+ for(const [key,name]of options)filters.append(link(name,route+(key?'?'+key:''),query.toString()===key?'button':'button secondary'));view.append(filters);
+ const path=root()+'/'+segment,suffix=query.toString(),data=await api(path+(suffix?'?'+suffix:'')),list=el('div',undefined,'grid');view.append(list);
+ const draw=items=>{for(const i of items){const n=card(i.title,animal?i.statusLabel+' · '+i.location:itemSummary(i));catalogPhoto(n,i.photo,i.title);n.append(text(i.description,'preview'),link('Ver detalles',`c/${community.id}/${segment}/${i.id}`));list.append(n);}};draw(data.items);if(!data.items.length)list.append(empty(animal?'No hay avisos en esta lista.':'No hay objetos en esta lista.'));
+ let next=data.nextBefore;const more=button('Ver anteriores',async()=>{const page=await api(path+'?'+(suffix?suffix+'&':'')+'before='+next);draw(page.items);next=page.nextBefore;more.hidden=next===null;},'secondary');more.hidden=next===null;view.append(more,button('Actualizar',()=>catalog(segment,query),'ghost'));
+}
+async function catalogDetail(segment,id){
+ const animal=segment==='animals',path=root()+'/'+segment+'/'+id,data=await api(path),i=data.notice||data.item,owner=(i.authorId||i.ownerId)===account.id,active=(i.status||i.state)==='Active';
+ heading(i.title,animal?i.statusLabel:itemSummary(i));view.append(link('← Volver',animal?'animals':'market','button ghost'));const box=card();catalogPhoto(box,i.photo,i.title);box.append(text(i.description,'body-text'),text(animal?`${i.authorName} · ${i.location} · ${date(i.occurredAt)}${i.isWithReporter?' · Está con quien publica el aviso':''}`:i.ownerName,'muted'));if(i.endsAt)box.append(text('Fin de subasta: '+date(i.endsAt)+(i.winnerName?' · Ganador: '+i.winnerName:'')));view.append(box);
+ const kind=animal?'Animal':'Object',openChat=async interestedUserId=>{const chat=await api(path+'/conversations','POST',animal?{}:{interestedUserId:interestedUserId||null});await go(`c/${community.id}/chat/${kind}/${id}/${chat.id}`);};
+ if(!owner && (active||(!animal&&i.winnerId===account.id)))box.append(button('Contactar en privado',()=>openChat()));
+ if(!animal && owner && i.winnerId)box.append(button('Contactar con ganador',()=>openChat(i.winnerId)));
+ for(const chat of data.conversations){const c=card(owner?chat.name:(i.authorName||i.ownerName),chat.lastMessage||'Sin mensajes');c.append(link('Abrir conversación',`c/${community.id}/chat/${kind}/${id}/${chat.id}`));view.append(c);}
+ if(!animal && i.mode==='Auction' && active && !owner){let amount,bidRequestId=crypto.randomUUID();const f=form('Pujar',async()=>{await api(path+'/bids','POST',{requestId:bidRequestId,amountCents:Math.round(Number(amount.value)*100)});await catalogDetail(segment,id);});const minimum=i.highestBidCents===null?i.priceCents:i.highestBidCents+i.bidStepCents;amount=field(f,'Tu puja (€)','number',(minimum/100).toFixed(2),{required:true,min:Math.max(0.01,minimum/100),max:1000000,step:'0.01'});amount.oninput=()=>{bidRequestId=crypto.randomUUID();};f.finish();box.append(f,text(i.leading?'Tu puja va en cabeza.':`${i.bidCount} pujas`,'muted'));}
+ if(animal && owner && active)box.append(button('Editar aviso',async()=>catalogForm(segment,i)));
+ const confirmAction=(title,url,body)=>button(title,async()=>ask(title,'Confirma el cambio de este anuncio.',title,async()=>{await api(path+url,'POST',body);await catalogDetail(segment,id);}), 'secondary');
+ if(active && (owner||community.role==='Admin'))box.append(confirmAction('Retirar anuncio',animal?'/close':'/withdraw',animal?{status:'Withdrawn'}:{}));
+ if(animal && active && owner)box.append(confirmAction('Ha vuelto a casa','/close',{status:'Recovered'}));
+ if(!animal && owner){if(active && i.mode==='Rent')box.append(confirmAction(i.isLent?'Marcar disponible':'Marcar prestado','/availability',{isLent:!i.isLent}));else if((active&&i.mode==='Sale')||(i.state==='Ended'&&i.bidCount>0))box.append(confirmAction('Marcar completado','/complete',{}));}
+ box.append(button('Denunciar anuncio',async()=>report(animal?'Animal':'Item',id),'ghost'));
+}
+async function jpegPhoto(file){
+ if(!file)return null;if(!file.type.startsWith('image/'))throw new ApiError(400,'Selecciona una imagen.');
+ const bitmap=await createImageBitmap(file);try{const canvas=document.createElement('canvas'),scale=Math.min(1,800/Math.max(bitmap.width,bitmap.height));canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);for(const quality of [.85,.65,.45,.25,.1]){const data=canvas.toDataURL('image/jpeg',quality).split(',')[1];if(atob(data).length<=40000)return data;}throw new ApiError(400,'La foto es demasiado detallada. Elige una imagen más pequeña.');}finally{bitmap.close();}
+}
+function catalogForm(segment,existing=null){
+ const animal=segment==='animals',key=segment+':'+community.id+':'+(existing?.id||'new'),saved=drafts.get(key)||{requestId:crypto.randomUUID(),...(existing||{})};drafts.set(key,saved);heading(existing?'Editar aviso':animal?'Publicar aviso de animal':'Publicar objeto');const box=card();box.classList.add('narrow');let title,description,mode,price,period,ends,step,kind,species,name,zone,occurred,withReporter,photo;
+ const f=form(existing?'Guardar cambios':'Publicar',async()=>{let payload={requestId:saved.requestId,description:description.value,photo:photo.files.length?await jpegPhoto(photo.files[0]):(existing?.photo||null)};
+ if(animal)payload={...payload,kind:kind.value,species:species.value,name:name.value,location:zone.value,occurredAt:new Date(occurred.value).toISOString(),isWithReporter:kind.value==='Found'&&withReporter.checked};
+ else payload={...payload,title:title.value,mode:mode.value,priceCents:Math.round(Number(price.value)*100),period:mode.value==='Rent'?period.value:null,endsAt:mode.value==='Auction'?new Date(ends.value).toISOString():null,bidStepCents:mode.value==='Auction'?Math.round(Number(step.value)*100):0};
+ const result=await api(root()+'/'+segment+(existing?'/'+existing.id+'?version='+existing.version:''),existing?'PUT':'POST',payload);drafts.delete(key);await go(`c/${community.id}/${segment}/${existing?.id||result.id}`);});
+ if(animal){kind=choice(f,'Aviso',[['Lost','Perdido'],['Found','Encontrado']],saved.kind);species=choice(f,'Animal',[['Dog','Perro'],['Cat','Gato']],saved.species);name=field(f,'Nombre (opcional)','text',saved.name||'',{maxLength:80});zone=field(f,'Zona aproximada','text',saved.location||'',{required:true,minLength:2,maxLength:160});const now=new Date();const localDate=v=>{const d=new Date(v);return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,16);};occurred=field(f,'Cuándo ocurrió','datetime-local',localDate(saved.occurredAt||now),{required:true,max:localDate(now)});withReporter=field(f,'Está conmigo','checkbox');withReporter.checked=saved.isWithReporter||false;const update=()=>{withReporter.disabled=kind.value!=='Found';if(withReporter.disabled)withReporter.checked=false;};kind.onchange=update;update();}
+ else{title=field(f,'Título','text',saved.title||'',{required:true,minLength:3,maxLength:120});mode=choice(f,'Modalidad',[['Sale','Venta'],['Rent','Alquiler'],['Auction','Subasta']],saved.mode);price=field(f,'Precio o salida (€)','number',saved.price||'0',{required:true,min:0,max:1000000,step:'0.01'});period=choice(f,'Periodo de alquiler',[['Hour','Hora'],['Day','Día'],['Week','Semana']],saved.period);ends=field(f,'Fin de subasta','datetime-local',saved.ends||'');step=field(f,'Incremento mínimo de puja (€)','number',saved.step||'1',{min:.01,max:1000000,step:'0.01'});const update=()=>{period.closest('label').hidden=mode.value!=='Rent';ends.closest('label').hidden=step.closest('label').hidden=mode.value!=='Auction';ends.required=step.required=mode.value==='Auction';};mode.onchange=update;update();}
+ description=field(f,'Descripción','textarea',saved.description||'',{required:true,maxLength:animal?2000:4000});photo=field(f,'Foto (opcional)','file','',{accept:'image/*'});
+ f.addEventListener('input',()=>{saved.requestId=crypto.randomUUID();Object.assign(saved,{description:description.value},animal?{kind:kind.value,species:species.value,name:name.value,location:zone.value,occurredAt:occurred.value,isWithReporter:withReporter.checked}:{title:title.value,mode:mode.value,price:price.value,period:period.value,ends:ends.value,step:step.value});});f.finish();box.append(f,link('Cancelar',animal?'animals':'market','button ghost'));view.append(box);
+}
