@@ -8,4 +8,5 @@
   <ItemGroup><ProjectReference Include="../../src/UrbaLink.Contracts/UrbaLink.Contracts.csproj" /></ItemGroup>
   <ItemGroup><PackageReference Include="Npgsql" Version="10.0.0" /></ItemGroup>
   <ItemGroup><None Update="Fixtures/*" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="../../src/UrbaLink.Api/Data/015_usernames.sql" LogicalName="UsernameMigration.sql" /></ItemGroup>
 </Project>

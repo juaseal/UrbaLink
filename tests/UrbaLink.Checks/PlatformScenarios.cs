@@ -23,7 +23,7 @@ internal static class PlatformScenarios
         var users=new List<SessionDto>();
         foreach(var client in new[]{owner,member,stranger})
         {
-            var session=await Post<SessionDto>(client,"api/auth/register",new RegisterRequest("Vecino",$"{Guid.NewGuid():N}@example.test","Platform-test-password-123"));users.Add(session);client.DefaultRequestHeaders.Authorization=new AuthenticationHeaderValue("Bearer",session.Token);
+            var session=await Post<SessionDto>(client,"api/auth/register",new RegisterRequest("Vecino "+Guid.NewGuid().ToString("N"),$"{Guid.NewGuid():N}@example.test","Platform-test-password-123"));users.Add(session);client.DefaultRequestHeaders.Authorization=new AuthenticationHeaderValue("Bearer",session.Token);
         }
         var registered=await Post<SessionDto>(platform,"api/auth/register",new RegisterRequest("Operador","operator.platform@example.test","Platform-test-password-123"));
         var fixedId=Guid.Parse("a7de3348-1f21-49c2-af1e-852d2d905541");

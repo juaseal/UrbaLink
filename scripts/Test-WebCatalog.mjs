@@ -13,21 +13,21 @@ class Element {
  get value(){return this.tagName==='select'&&!this._value?this.children[0]?.value||'':this._value;}
  closest(){return this.parentNode||this;}
  querySelector(tag){return this.children.find(n=>n.tagName===tag);}
- addEventListener(){} setAttribute(){} removeAttribute(){} focus(){} close(){this.open=false;} showModal(){this.open=true;}
+ addEventListener(){} setAttribute(){} removeAttribute(){} focus(){} select(){} close(){this.open=false;} showModal(){this.open=true;}
 }
 const nodes=new Map(),calls=[];
 let response=()=>({items:[],nextBefore:null});
 const document={getElementById:id=>{if(!nodes.has(id))nodes.set(id,new Element('div'));return nodes.get(id);},createElement:tag=>new Element(tag),querySelectorAll:()=>[],addEventListener(){},hidden:false};
-const location={hash:'#home'},community={id:'community-1',name:'Los Olivos',state:'Active',role:'Member'};
+const location={hash:'#home',origin:'https://urbalink.example',pathname:'/'},community={id:'community-1',name:'Los Olivos',state:'Active',role:'Member'};
 const context={document,location,history:{pushState(a,b,url){location.hash=url;},replaceState(a,b,url){location.hash=url;}},window:{addEventListener(){},scrollTo(){}},localStorage:{getItem(){},setItem(){}},setInterval(){},crypto:webcrypto,URLSearchParams,Intl,Date,Map,Error,console,fetch:async(path,options)=>{calls.push({path,method:options.method,body:options.body?JSON.parse(options.body):undefined});const data=response(path,options);return {ok:true,status:data===null?204:200,json:async()=>data};}};
 const path=new URL('../src/UrbaLink.Api/wwwroot/assets/app.js',import.meta.url);
 const source=readFileSync(path,'utf8').replace('await run(boot);','');
-runInNewContext(source+'\naccount={id:"viewer",name:"Vecino"};community='+JSON.stringify(community)+';communities=[community];globalThis.test={render,catalog,catalogDetail,catalogForm,view,run};',context);
+runInNewContext(source+'\naccount={id:"viewer",name:"Vecino"};community='+JSON.stringify(community)+';communities=[community];globalThis.test={render,catalog,catalogDetail,catalogForm,invitationsPage,join,rideForm,profile,home,login,view,run,setRole:role=>community.role=role};',context);
 const {test}=context;
 function descendants(n){return [n,...n.children.filter(x=>typeof x==='object').flatMap(descendants)];}
 const find=tag=>descendants(test.view).filter(n=>n.tagName===tag);
 const input=label=>descendants(test.view).find(n=>n.tagName==='label'&&n._text===label)?.children[0];
-async function submit(){await find('form')[0].onsubmit({preventDefault(){}});await new Promise(resolve=>setImmediate(resolve));assert.equal(nodes.get('feedback').textContent,'');}
+async function submit(expected=''){await find('form')[0].onsubmit({preventDefault(){}});await new Promise(resolve=>setImmediate(resolve));assert.equal(nodes.get('feedback').textContent,expected);}
 function mock(fn){calls.length=0;response=fn;}
 const item={id:7,ownerId:'seller',ownerName:'Alba',title:'Bicicleta',description:'Buen estado',mode:'Sale',priceCents:2500,state:'Active',highestBidCents:null,bidCount:0,photo:null};
 const notice={id:8,authorId:'viewer',authorName:'Vecino',title:'Perro perdido',description:'Collar azul',kind:'Lost',species:'Dog',name:'Toby',location:'Parque',occurredAt:'2026-10-22T10:00:00Z',status:'Active',statusLabel:'Activo',version:2,photo:null};
@@ -43,4 +43,15 @@ mock(path=>path.includes('/animals/')?{notice,conversations:[]}:notice);test.cat
 mock((path,options)=>options.method==='PUT'?null:{notice,conversations:[]});test.catalogForm('animals',notice);input('Descripción').value='Collar rojo';await submit();sent=calls.find(c=>c.method==='PUT');assert.equal(sent.path,'/api/communities/community-1/animals/8?version=2');assert.equal(sent.body.description,'Collar rojo');
 const auction={...item,mode:'Auction',highestBidCents:2500,bidStepCents:100,bidCount:1};mock(()=>({item:auction,conversations:[]}));await test.catalogDetail('items',7);assert.equal(input('Tu puja (€)').value,'26.00');await submit();sent=calls.find(c=>c.method==='POST');assert.equal(sent.path,'/api/communities/community-1/items/7/bids');assert.equal(sent.body.amountCents,2600);
 const html=readFileSync(new URL('../src/UrbaLink.Api/wwwroot/index.html',import.meta.url),'utf8');assert.match(html,/href="#market"/);assert.match(html,/href="#animals"/);
-console.log('OK: catalog routes, filters, pagination, details, private contact, sale/rent/auction forms, animal creation/editing, bid amounts and navigation.');
+test.setRole('Admin');
+const invitation={id:'invite-1',code:'A'.repeat(32),maxUses:25,uses:0,expiresAt:'2026-11-01T10:00:00Z'};mock((path,options)=>options.method==='POST'?invitation:[]);location.hash='#c/community-1/invitations';await test.render();assert.match(test.view.textContent,/invitar|Invitar/);input('Máximo de nuevos vecinos').value='25';await submit();sent=calls.find(c=>c.method==='POST');assert.equal(sent.path,'/api/communities/community-1/invitations?maxUses=25');assert.equal(input('Código').value,invitation.code);assert.equal(input('Enlace para compartir').value,'https://urbalink.example/#join?code='+invitation.code);
+location.hash='#join?code='+invitation.code;test.join();assert.equal(input('Código de invitación').value,invitation.code);
+test.setRole('Member');await assert.rejects(()=>test.invitationsPage(),/Solo los administradores/);
+const ride={post:{id:12,authorId:'viewer',authorName:'Vecino'},origin:'Centro',destination:'Estación',days:5,departureMinutes:480,returnMinutes:1080,returnNextDay:false,seats:3,priceCents:150,allowsDetour:true,detourDetails:'Cinco minutos',meetingPoint:'Entrada',notes:'Sin equipaje'};
+mock(()=>({items:[ride],nextBefore:12}));location.hash='#rides?day=0';await test.render();assert.equal(calls[0].path,'/api/communities/community-1/rides?day=0');assert.match(test.view.textContent,/Centro → Estación/);assert.match(test.view.textContent,/08:00/);await find('button').find(n=>n.textContent==='Ver trayectos anteriores').onclick();assert.equal(calls.at(-1).path,'/api/communities/community-1/rides?day=0&before=12');
+mock(path=>path.endsWith('/rides')?ride:{post:{id:12,title:'Trayecto',category:'Coche',body:'Ruta',authorId:'viewer',createdAt:'2026-10-24'},items:[],nextBefore:null});test.rideForm();input('Origen').value='Centro';input('Destino').value='Estación';input('Lun').checked=true;input('Mié').checked=true;input('También hago la vuelta').checked=true;input('Salida de vuelta').value='18:30';input('Vuelvo al día siguiente').checked=true;input('Precio por asiento y sentido (€)').value='1.50';input('Plazas para pasajeros').value='3';await submit();sent=calls.find(c=>c.method==='POST');assert.equal(sent.path,'/api/communities/community-1/rides');assert.equal(sent.body.days,5);assert.equal(sent.body.departureMinutes,480);assert.equal(sent.body.returnMinutes,1110);assert.equal(sent.body.returnNextDay,true);assert.equal(sent.body.priceCents,150);assert.equal(sent.body.seats,3);
+mock(()=>({memberCount:5,activePosts:3,sharedItems:2,routes:1,recent:[],notice:{id:15,title:'Aviso importante',body:'Texto'}}));await test.home();assert.match(test.view.textContent,/Trayectos/);assert.ok(find('a').some(n=>n.href==='#rides'));assert.ok(find('a').some(n=>n.href==='#c/community-1/post/15'));
+mock(()=>({id:'viewer',name:'Vecino',username:'Vecino',email:''}));test.profile();assert.equal(input('Correo electrónico (opcional)').required,undefined);await submit('Perfil guardado.');assert.equal(calls[0].method,'PUT');assert.equal(calls[0].path,'/api/me');
+mock(()=>[{id:'deleted-1',name:'Comunidad archivada'}]);location.hash='#trash';await test.render();assert.equal(calls[0].path,'/api/communities/trash');assert.match(test.view.textContent,/Restaurar comunidad/);
+assert.match(html,/href="#rides"/);test.login(true);const auth=nodes.get('auth');assert.ok(descendants(auth).some(n=>n._text==='Nombre de usuario'));assert.equal(descendants(auth).find(n=>n.type==='password').minLength,1);assert.ok(!descendants(auth).some(n=>n.type==='email'));
+console.log('OK: catalog routes, filters, pagination, details, private contact, sale/rent/auction forms, animal creation/editing, bid amounts, collective invitations, rides, optional email, community trash and username registration.');

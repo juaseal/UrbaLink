@@ -6,7 +6,7 @@ namespace UrbaLink.Api;
 
 public static class PlatformEndpoints
 {
-    public sealed record LoginInput(string Email,string Password);
+    public sealed record LoginInput(string? Email,string Password,string? Username=null);
     public sealed record Decision(string State,string Reason);
     private static readonly PasswordHasher<string> Hasher=new();
     private static readonly string DummyHash=Hasher.HashPassword("",Tokens.New());
@@ -33,11 +33,11 @@ public static class PlatformEndpoints
     }
     private static async Task<IResult> Login(LoginInput input,NpgsqlDataSource db,IConfiguration config,CancellationToken ct)
     {
-        var email=input.Email?.Trim().ToLowerInvariant()??"";
+        var email=input.Username is not null?input.Username.Trim():input.Email?.Trim().ToLowerInvariant()??"";
         if(email.Length>254 || input.Password is null || input.Password.Length is <1 or >128)return Error("Acceso no válido.",401);
         await using var c=await db.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);
         Guid? uid=null;var hash=DummyHash;
-        await using(var q=Database.Command(c,"SELECT id,password_hash FROM users WHERE email=$1 AND NOT is_suspended FOR SHARE",email))
+        await using(var q=Database.Command(c,"SELECT id,password_hash FROM users WHERE (CASE WHEN $2 THEN lower(username)=lower($1) ELSE email=$1 END) AND NOT is_suspended FOR SHARE",email,input.Username is not null))
         await using(var r=await q.ExecuteReaderAsync(ct)){if(await r.ReadAsync(ct)){uid=r.GetGuid(0);hash=r.GetString(1);}}
         var password=Hasher.VerifyHashedPassword(email,hash,input.Password);
         if(uid is not {} id || password==PasswordVerificationResult.Failed || !IsAdmin(config,id))return Error("Acceso no válido. Comprueba credenciales y autorización.",401);

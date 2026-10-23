@@ -33,7 +33,7 @@ internal static class ArchitectureScenarios
         using var bob = new HttpClient { BaseAddress = new Uri(url) };
         foreach (var client in new[] { owner, alice, bob })
         {
-            var session = await Post<SessionDto>(client, "api/auth/register", new RegisterRequest("Arquitectura", $"{Guid.NewGuid():N}@example.test", "Architecture-tests-123"));
+            var session = await Post<SessionDto>(client, "api/auth/register", new RegisterRequest("Arquitectura "+Guid.NewGuid().ToString("N"), $"{Guid.NewGuid():N}@example.test", "Architecture-tests-123"));
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
         }
         var community = await Post<CommunityDto>(owner, "api/communities", new CreateCommunityRequest("Arquitectura"));

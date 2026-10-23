@@ -87,10 +87,63 @@ internal static class AccountScenarios
                 throw new Exception("Una invitación se pudo consumir más de una vez.");
         }
         finally { foreach (var response in races) response.Dispose(); }
+        await CheckCollectiveInvitations(admin, member, other, fourth, Expect);
         await Expect(await member.PostAsync("api/auth/logout", null), HttpStatusCode.NoContent);
         await Expect(await member.GetAsync("api/me"), HttpStatusCode.Unauthorized);
         await CheckPersistentSessions(login, adminSession, Signed, Expect);
         Console.WriteLine("OK: registro, login, normalización, aislamiento, permisos, invitaciones atómicas y revocación.");
+    }
+
+    private static async Task CheckCollectiveInvitations(HttpClient admin, HttpClient member, HttpClient other, HttpClient fourth,
+        Func<HttpResponseMessage, HttpStatusCode, Task> expect)
+    {
+        async Task<T> Post<T>(HttpClient client, string path, object body)
+        {
+            using var response = await client.PostAsJsonAsync(path, body);
+            response.EnsureSuccessStatusCode();
+            return (await response.Content.ReadFromJsonAsync<T>())!;
+        }
+        var community = await Post<CommunityDto>(admin, "api/communities", new CreateCommunityRequest("Invitaciones colectivas"));
+        var path = $"api/communities/{community.Id}/invitations";
+        await expect(await admin.PostAsync(path+"?maxUses=0", null), HttpStatusCode.BadRequest);
+        await expect(await admin.PostAsync(path+"?maxUses=1001", null), HttpStatusCode.BadRequest);
+        await expect(await other.PostAsync(path+"?maxUses=2", null), HttpStatusCode.Forbidden);
+        var invitation = await Post<InvitationDto>(admin, path+"?maxUses=2", new {});
+        if (invitation.MaxUses != 2 || invitation.Id == Guid.Empty) throw new Exception("Invitación colectiva incorrecta.");
+        await Post<CommunityDto>(member, "api/communities/join", new JoinRequest(invitation.Code));
+        await expect(await member.PostAsJsonAsync("api/communities/join", new JoinRequest(invitation.Code)), HttpStatusCode.Conflict);
+        var summaries = (await admin.GetFromJsonAsync<InvitationSummary[]>(path))!;
+        if (summaries.Single().Uses != 1) throw new Exception("Un vecino repetido consume otro uso.");
+        await expect(await member.GetAsync(path), HttpStatusCode.Forbidden);
+        await expect(await member.DeleteAsync(path+"/"+invitation.Id), HttpStatusCode.Forbidden);
+        var race = await Task.WhenAll(other.PostAsJsonAsync("api/communities/join", new JoinRequest(invitation.Code)),
+            fourth.PostAsJsonAsync("api/communities/join", new JoinRequest(invitation.Code)));
+        try
+        {
+            if(race.Count(r=>r.StatusCode==HttpStatusCode.OK)!=1 || race.Count(r=>r.StatusCode==HttpStatusCode.BadRequest)!=1)
+                throw new Exception("Las entradas simultáneas exceden el límite colectivo.");
+        }
+        finally { foreach(var response in race) response.Dispose(); }
+        if ((await admin.GetFromJsonAsync<InvitationSummary[]>(path))!.Length != 0)
+            throw new Exception("Una invitación agotada aparece activa.");
+        var revocable = await Post<InvitationDto>(admin, path+"?maxUses=100", new {});
+        var otherCommunity = await Post<CommunityDto>(admin, "api/communities", new CreateCommunityRequest("Otra comunidad colectiva"));
+        await expect(await admin.DeleteAsync($"api/communities/{otherCommunity.Id}/invitations/{revocable.Id}"), HttpStatusCode.NotFound);
+        await expect(await admin.DeleteAsync(path+"/"+revocable.Id), HttpStatusCode.NoContent);
+        await expect(await other.PostAsJsonAsync("api/communities/join", new JoinRequest(revocable.Code)), HttpStatusCode.BadRequest);
+        if ((await member.GetFromJsonAsync<CommunityDto[]>("api/communities"))!.All(c=>c.Id!=community.Id))
+            throw new Exception("Revocar una invitación expulsa a los vecinos existentes.");
+        var expired = await Post<InvitationDto>(admin, path+"?maxUses=2", new {});
+        var connection = Environment.GetEnvironmentVariable("URBALINK_TEST_CONNECTION");
+        if (new NpgsqlConnectionStringBuilder(connection).Database?.StartsWith("urbalink_posts_test_") != true)
+            throw new Exception("Solo se permiten bases temporales.");
+        await using var db = new NpgsqlConnection(connection);
+        await db.OpenAsync();
+        await using var command = new NpgsqlCommand("UPDATE invitations SET expires_at=now()-interval '1 second' WHERE id=$1", db);
+        command.Parameters.AddWithValue(expired.Id);
+        await command.ExecuteNonQueryAsync();
+        await expect(await other.PostAsJsonAsync("api/communities/join", new JoinRequest(expired.Code)), HttpStatusCode.BadRequest);
+        Console.WriteLine("OK: invitaciones colectivas, límites concurrentes, usos únicos, permisos, aislamiento, revocación y caducidad.");
     }
 
     private static async Task CheckPersistentSessions(SessionDto login, SessionDto original,

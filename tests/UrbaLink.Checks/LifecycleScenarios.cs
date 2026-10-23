@@ -20,7 +20,7 @@ internal static class LifecycleScenarios
         }
         foreach (var c in new[] { admin, member })
         {
-            var session = await Post<SessionDto>(c,"api/auth/register",new RegisterRequest("Prueba",$"{Guid.NewGuid():N}@example.test","Lifecycle-password-123"));
+            var session = await Post<SessionDto>(c,"api/auth/register",new RegisterRequest("Prueba "+Guid.NewGuid().ToString("N"),$"{Guid.NewGuid():N}@example.test","Lifecycle-password-123"));
             c.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer",session.Token);
         }
         var first = await Post<CommunityDto>(admin,"api/communities",new CreateCommunityRequest("carambolo"));

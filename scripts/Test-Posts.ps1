@@ -1,4 +1,4 @@
-param([ValidateSet('posts', 'comments', 'lifecycle', 'market', 'rides', 'services', 'architecture', 'accounts', 'animals', 'platform', 'web')][string]$Suite = 'posts', [switch]$Preview)
+param([ValidateSet('posts', 'comments', 'lifecycle', 'market', 'rides', 'services', 'architecture', 'accounts', 'animals', 'platform', 'web', 'usernames')][string]$Suite = 'posts', [switch]$Preview)
 # Requires PowerShell 7, Docker Desktop and the project's local PostgreSQL container.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -75,7 +75,7 @@ try {
         }
         if (!$ready) { throw 'La API no quedó lista.' }
         if ($run -eq 0) {
-            if ($Suite -in @('market', 'architecture', 'accounts', 'animals', 'platform', 'web')) { $env:URBALINK_TEST_CONNECTION = $connection.ConnectionString }
+            if ($Suite -in @('market', 'architecture', 'accounts', 'animals', 'platform', 'web', 'usernames')) { $env:URBALINK_TEST_CONNECTION = $connection.ConnectionString }
             & dotnet $checks $url $Suite
             if ($LASTEXITCODE -ne 0) { throw 'Fallaron las pruebas del tablón.' }
             $countBefore = & docker exec $container psql -U urbalink -d $dbName -Atc 'SELECT (SELECT count(*) FROM users) + (SELECT count(*) FROM posts) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM market_items) + (SELECT count(*) FROM market_bids) + (SELECT count(*) FROM market_messages) + (SELECT count(*) FROM animal_notices) + (SELECT count(*) FROM animal_notice_history) + (SELECT count(*) FROM moderation_reports) + (SELECT count(*) FROM platform_audit)'

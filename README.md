@@ -1,6 +1,6 @@
 # UrbaLink
 
-Aplicación vecinal para comunidades privadas. Base inicial en C# y .NET 10:
+Aplicación vecinal para comunidades privadas. El desarrollo se centra en la web; Android queda en pausa. Base en C# y .NET 10:
 .NET MAUI para Android, API ASP.NET Core y PostgreSQL.
 
 La distribución de módulos, los invariantes de concurrencia, la configuración
@@ -25,7 +25,7 @@ locales. Las nuevas comunidades requieren la aprobación de plataforma habitual.
 
 La web incluye Compraventa (venta, alquiler y subastas, fotos, pujas y contacto
 privado) y Animales (avisos de pérdida y hallazgo, edición, cierre y contacto).
-Los trayectos continúan disponibles en el filtro del tablón. La campana de esta versión avisa de
+Trayectos incluye catálogo por días, formulario con ida/vuelta, plazas, precio, desvíos y preguntas. La campana de esta versión avisa de
 mensajes privados; no hay push con el navegador cerrado ni avisos de comentarios.
 
 La sesión del navegador utiliza una cookie HttpOnly, SameSite=Strict y Secure en
@@ -35,7 +35,7 @@ en localStorage; solo se recuerda la comunidad seleccionada. Cerrar sesión revo
 esa sesión y conserva las sesiones de otros dispositivos.
 
 Se trabaja en la misma rama `main` y no hace falta otro servicio Railway, variables
-nuevas ni migraciones adicionales. El Dockerfile existente publica también `wwwroot`.
+nuevas. Las migraciones 014 y 015 se aplican con el pre-deploy habitual. El Dockerfile existente publica también `wwwroot`.
 Consulta [DEPLOYMENT.md](DEPLOYMENT.md#web-de-vecinos-en-el-mismo-servicio) para actualizar.
 
     pwsh -File scripts/Test-Posts.ps1 -Suite web
@@ -47,7 +47,7 @@ Para revisar el navegador con datos ficticios y limpieza de la base al terminar:
 ## Qué funciona en esta entrega
 
 - Conexión automática de la app Android con el servidor de UrbaLink.
-- Registro con nombre, correo y contraseña; inicio y cierre de sesión.
+- Registro con nombre de usuario único y contraseña de 1–128 caracteres; correo opcional en el perfil.
 - Sesiones persistentes de 180 días, renovadas con el uso como máximo una vez al
   día en condiciones normales. Se guarda solo el token en SecureStorage, nunca
   la contraseña. Cerrar sesión revoca el acceso de ese dispositivo.
@@ -55,7 +55,7 @@ Para revisar el navegador con datos ficticios y limpieza de la base al terminar:
   servidor. Un fallo de red conserva la sesión y permite reintentar la conexión.
 - Creación de comunidades: el creador queda como administrador.
 - Lista de comunidades limitada al usuario autenticado.
-- Invitaciones de un solo uso, válidas siete días y generadas solo por administradores.
+- Invitaciones individuales o colectivas, válidas siete días y generadas solo por administradores.
 - Entrada como vecino mediante invitación, incluso ante peticiones simultáneas.
 - Contraseñas con PasswordHasher de ASP.NET Core; sesiones e invitaciones
   almacenadas solo como hashes. No se registran contraseñas ni tokens en logs.
@@ -78,10 +78,10 @@ que represente oficialmente a una urbanización.
    e idempotente, con un bloqueo para evitar migraciones simultáneas.
 3. Ejecuta UrbaLink.Mobile de nuevo desde Visual Studio.
 4. La app abre directamente el acceso a tu cuenta. Para probar contra la API local, compila con `UrbaLinkServerUrl` como se indica en la sección de Wi-Fi.
-5. Pulsa **Quiero registrarme**. La contraseña debe tener 12–128 caracteres.
+5. Pulsa **Quiero registrarme**. Elige un usuario único y una contraseña de 1–128 caracteres; no se pide correo.
 6. Crea una comunidad, por ejemplo El Carambolo. Tu cuenta será administradora.
 7. Pulsa **Invitar**, copia el código y vuelve atrás.
-8. Cierra sesión y crea otra cuenta (otro correo de pruebas).
+8. Cierra sesión y crea otra cuenta (otro nombre de usuario de pruebas).
 9. Introduce el código para entrar como vecino. Esa cuenta no podrá invitar.
 
 Puedes volver a iniciar sesión con la primera cuenta. Los datos sobreviven al
@@ -563,3 +563,41 @@ predeterminado es `https://urbalink-production.up.railway.app`; solo Debug permi
 HTTP para pruebas locales. Release exige HTTPS. Si cambia el dominio de producción,
 actualiza esta propiedad y distribuye la app; usar un dominio propio estable evita
 que los cambios del proveedor obliguen a cambiar la dirección en el APK.
+
+## Invitar a un grupo de vecinos
+
+En la web, abre **Mi cuenta → Invitar vecinos**. Crea una invitación colectiva,
+indica el máximo de nuevos vecinos (de 2 a 1000; por defecto 100) y copia el enlace
+para compartirlo con tu grupo. Cada vecino entra o se registra con su propia cuenta
+y confirma que quiere unirse. La gestión de invitaciones colectivas se ofrece en la web.
+
+El enlace y código solo se muestran al crearlos. Caducan a los siete días o al
+agotar su límite; una cuenta que ya pertenece a la comunidad no consume otro uso.
+Los administradores pueden consultar los usos y revocar las invitaciones activas,
+incluso después de recargar la página. Revocar no expulsa a quienes ya entraron.
+Las invitaciones individuales anteriores conservan su límite de un solo uso.
+
+La migración 014 añade los contadores y conserva las invitaciones existentes,
+incluidas las ya utilizadas. Se aplica mediante el pre-deploy habitual de Railway.
+
+Comprobaciones: `pwsh -File scripts/Test-Posts.ps1 -Suite accounts` y
+`node scripts/Test-WebCatalog.mjs`.
+## Acceso por nombre de usuario y funciones web
+
+El registro web pide un nombre de usuario único (sin distinguir mayúsculas) y una
+contraseña no vacía de hasta 128 caracteres. No solicita correo. En **Mi cuenta**
+se puede añadir, cambiar o retirar un correo opcional. Las contraseñas continúan
+almacenándose como hashes y las sesiones conservan la protección existente.
+
+La migración 015 conserva las cuentas y contraseñas anteriores. Usa el nombre
+existente como usuario y añade un sufijo a los duplicados. Las cuentas anteriores
+pueden entrar mediante **Entrar con el correo de mi cuenta anterior** y consultar
+su usuario asignado en el perfil. El panel de plataforma admite ambas formas.
+
+La web reúne las funciones vecinales existentes de Android: inicio y avisos,
+tablón con todos sus filtros, comentarios, servicios y contacto privado,
+compraventa/alquiler/subastas, animales, trayectos completos, mensajes y contador
+de no leídos, denuncias, perfil, comunidades, invitaciones, papelera y restauración.
+No se añaden pantallas nuevas a Android durante esta fase.
+
+Pruebas del acceso: `pwsh -File scripts/Test-Posts.ps1 -Suite usernames`.

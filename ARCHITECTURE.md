@@ -183,3 +183,18 @@ consultar el servicio de vulnerabilidades de NuGet; esa auditoría queda pendien
 
 Estos límites son explícitos: la refactorización corrige fallos comprobados del
 código, pero no convierte el entorno local en una plataforma de alta disponibilidad.
+
+## Web como cliente principal
+
+La web de vecinos incluye los módulos existentes de Android, incluidos Trayectos,
+Animales, Compraventa y la papelera de comunidades. Android queda en pausa.
+
+La migración 014 añade límite y contador a las invitaciones, con actualización
+atómica bajo el mismo bloqueo de invitación que la incorporación de miembros.
+La revocación invalida el código sin retirar membresías ya creadas.
+
+La migración 015 añade usuario único con índice sobre `lower(username)`, conserva
+las contraseñas anteriores y hace nullable el correo. El registro admite contraseñas
+no vacías de hasta 128 caracteres. El correo se modifica en `/api/me`; no cambia
+el usuario ni revoca las sesiones. El acceso por usuario y la compatibilidad por
+correo usan campos de solicitud distintos para evitar identidades ambiguas.

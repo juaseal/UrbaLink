@@ -23,7 +23,7 @@ internal static class ServiceScenarios
         static void Check(bool value, string message) { if (!value) throw new Exception(message); }
         foreach (var client in new[] { admin, owner, alice, bob, outsider })
         {
-            var session = await Post<SessionDto>(client, "api/auth/register", new RegisterRequest("Vecino", $"{Guid.NewGuid():N}@example.test", "Service-test-password-123"));
+            var session = await Post<SessionDto>(client, "api/auth/register", new RegisterRequest("Vecino "+Guid.NewGuid().ToString("N"), $"{Guid.NewGuid():N}@example.test", "Service-test-password-123"));
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
         }
         var community = await Post<CommunityDto>(admin, "api/communities", new CreateCommunityRequest("Servicios test"));

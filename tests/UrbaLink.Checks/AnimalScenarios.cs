@@ -22,7 +22,7 @@ internal static class AnimalScenarios
         static void Check(bool value,string text){if(!value)throw new Exception(text);}
         foreach(var c in new[]{admin,owner,finder,stranger})
         {
-            var session=await Post<SessionDto>(c,"api/auth/register",new RegisterRequest("Vecino",$"{Guid.NewGuid():N}@example.test","Animals-test-password-123"));
+            var session=await Post<SessionDto>(c,"api/auth/register",new RegisterRequest("Vecino "+Guid.NewGuid().ToString("N"),$"{Guid.NewGuid():N}@example.test","Animals-test-password-123"));
             c.DefaultRequestHeaders.Authorization=new AuthenticationHeaderValue("Bearer",session.Token);
         }
         var community=await Post<CommunityDto>(admin,"api/communities",new CreateCommunityRequest("Animales test"));

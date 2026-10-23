@@ -15,6 +15,8 @@ public static partial class CommunityEndpoints
         group.MapPost("", CreateCommunity);
         group.MapPost("/join", Join).RequireRateLimiting("auth");
         group.MapPost("/{id:guid}/invitations", Invite);
+        group.MapGet("/{id:guid}/invitations", Invitations);
+        group.MapDelete("/{id:guid}/invitations/{invitationId:guid}", RevokeInvitation);
         group.MapGet("/trash", Trash);
         group.MapGet("/{id:guid}/overview", Overview);
         group.MapPost("/{id:guid}/delete", Delete);

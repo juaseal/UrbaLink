@@ -20,6 +20,7 @@ public static class AccountEndpoints
         api.MapPost("/auth/login", Login).RequireRateLimiting("auth");
         var secured = api.MapGroup("").RequireAuthorization();
         secured.MapGet("/me", Me);
+        secured.MapPut("/me", UpdateProfile);
         secured.MapPost("/auth/logout", Logout);
 
     }
@@ -41,20 +42,19 @@ public static class AccountEndpoints
     {
         var name = request.Name?.Trim() ?? "";
         var email = NormalizeEmail(request.Email);
-        if (name.Length is < 2 or > 80 || email.Length > 254 ||
-            !MailAddress.TryCreate(email, out var parsed) || parsed.Address != email ||
-            request.Password is null || request.Password.Length is < 12 or > 128)
-            return Error("Indica un nombre de 2–80 caracteres, un correo válido y una contraseña de 12–128 caracteres.");
+        if (name.Length is < 1 or > 80 || !ValidEmail(email) ||
+            request.Password is null || request.Password.Length is < 1 or > 128)
+            return Error("Elige un nombre de usuario de 1–80 caracteres y una contraseña de 1–128 caracteres. El correo es opcional.");
 
-        var account = new AccountDto(Guid.NewGuid(), name, email);
-        var hash = Hasher.HashPassword(email, request.Password);
+        var account = new AccountDto(Guid.NewGuid(), name, email, name);
+        var hash = Hasher.HashPassword(name, request.Password);
         await using var connection = await source.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
         try
         {
             await using var command = Database.Command(connection,
-                "INSERT INTO users(id,name,email,password_hash) VALUES ($1,$2,$3,$4)",
-                account.Id, name, email, hash);
+                "INSERT INTO users(id,name,email,password_hash,username) VALUES ($1,$2,$3,$4,$2)",
+                account.Id, name, email.Length==0?null:email, hash);
             await command.ExecuteNonQueryAsync(ct);
             var session = await NewSession(connection, account, ct);
             await transaction.CommitAsync(ct);
@@ -62,37 +62,37 @@ public static class AccountEndpoints
         }
         catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.UniqueViolation)
         {
-            return Error("No se pudo crear la cuenta. Prueba a iniciar sesión.", 409);
+            return Error(exception.ConstraintName=="users_username_unique"?"Ese nombre de usuario ya está ocupado. Elige otro.":"Ese correo ya está asociado a otra cuenta.", 409);
         }
     }
 
     internal static async Task<IResult> Login(LoginRequest request, NpgsqlDataSource source, CancellationToken ct)
     {
-        var email = NormalizeEmail(request.Email);
-        if (email.Length > 254 || request.Password is null || request.Password.Length is < 1 or > 128)
-            return Error("Correo o contraseña incorrectos.", 401);
+        var identifier = request.Username is not null ? request.Username.Trim() : NormalizeEmail(request.Email);
+        if (identifier.Length is < 1 or > 254 || request.Password is null || request.Password.Length is < 1 or > 128)
+            return Error("Usuario o contraseña incorrectos.", 401);
 
         await using var connection = await source.OpenConnectionAsync(ct);
         AccountDto? account = null;
         var hash = DummyHash;
         await using (var command = Database.Command(connection,
-            "SELECT id,name,email,password_hash FROM users WHERE email=$1 AND NOT is_suspended", email))
+            "SELECT id,name,email,password_hash,username FROM users WHERE (CASE WHEN $2 THEN lower(username)=lower($1) ELSE email=$1 END) AND NOT is_suspended", identifier, request.Username is not null))
         await using (var reader = await command.ExecuteReaderAsync(ct))
         {
             if (await reader.ReadAsync(ct))
             {
-                account = new AccountDto(reader.GetGuid(0), reader.GetString(1), reader.GetString(2));
+                account = new AccountDto(reader.GetGuid(0), reader.GetString(1), reader.IsDBNull(2)?"":reader.GetString(2), reader.GetString(4));
                 hash = reader.GetString(3);
             }
         }
-        var verified = Hasher.VerifyHashedPassword(email, hash, request.Password);
+        var verified = Hasher.VerifyHashedPassword(identifier, hash, request.Password);
         if (account is null || verified == PasswordVerificationResult.Failed)
-            return Error("Correo o contraseña incorrectos.", 401);
+            return Error("Usuario o contraseña incorrectos.", 401);
         if (verified == PasswordVerificationResult.SuccessRehashNeeded)
         {
             await using var update = Database.Command(connection,
                 "UPDATE users SET password_hash=$1 WHERE id=$2",
-                Hasher.HashPassword(email, request.Password), account.Id);
+                Hasher.HashPassword(identifier, request.Password), account.Id);
             await update.ExecuteNonQueryAsync(ct);
         }
         return Results.Ok(await NewSession(connection, account, ct));
@@ -102,11 +102,31 @@ public static class AccountEndpoints
     {
         await using var connection = await source.OpenConnectionAsync(ct);
         await using var command = Database.Command(connection,
-            "SELECT id,name,email FROM users WHERE id=$1", Tokens.UserId(principal));
+            "SELECT id,name,email,username FROM users WHERE id=$1", Tokens.UserId(principal));
         await using var reader = await command.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct)
-            ? Results.Ok(new AccountDto(reader.GetGuid(0), reader.GetString(1), reader.GetString(2)))
+            ? Results.Ok(new AccountDto(reader.GetGuid(0), reader.GetString(1), reader.IsDBNull(2)?"":reader.GetString(2), reader.GetString(3)))
             : Results.Unauthorized();
+    }
+
+    private static bool ValidEmail(string email) => email.Length==0 ||
+        (email.Length<=254 && MailAddress.TryCreate(email,out var parsed) && parsed.Address==email);
+
+    private static async Task<IResult> UpdateProfile(UpdateProfileRequest request, ClaimsPrincipal principal, NpgsqlDataSource source, CancellationToken ct)
+    {
+        var email=NormalizeEmail(request.Email);
+        if(!ValidEmail(email))return Error("Indica un correo válido o deja el campo vacío.");
+        await using var connection=await source.OpenConnectionAsync(ct);
+        try
+        {
+            await using var command=Database.Command(connection,"UPDATE users SET email=$1 WHERE id=$2 RETURNING id,name,email,username",email.Length==0?null:email,Tokens.UserId(principal));
+            await using var reader=await command.ExecuteReaderAsync(ct);
+            return await reader.ReadAsync(ct)
+                ? Results.Ok(new AccountDto(reader.GetGuid(0),reader.GetString(1),reader.IsDBNull(2)?"":reader.GetString(2),reader.GetString(3)))
+                : Results.Unauthorized();
+        }
+        catch(PostgresException e) when(e.SqlState==PostgresErrorCodes.UniqueViolation)
+        {return Error("Ese correo ya está asociado a otra cuenta.",409);}
     }
 
     private static async Task<IResult> Logout(HttpContext context, NpgsqlDataSource source, CancellationToken ct)

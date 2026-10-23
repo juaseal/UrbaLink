@@ -187,7 +187,7 @@ crear un proyecto de Sites, un segundo servicio Railway ni otra base de datos.
 1. Revisa y sube los cambios de esta versión al mismo repositorio/rama que ya
    utiliza el servicio API de Railway.
 2. Conserva el Dockerfile, las variables de PostgreSQL y el pre-deploy de migraciones
-   habituales. Esta entrega no añade migraciones nuevas.
+   habituales. Las migraciones 014 (invitaciones colectivas) y 015 (usuarios únicos y correo opcional) deben aplicarse antes de arrancar esta versión.
 3. Mantén `ASPNETCORE_ENVIRONMENT=Production` y `Hosting__RailwayEdge=true`.
    La cabecera del proxy HTTPS permite emitir correctamente la cookie Secure.
 4. Espera al despliegue del nuevo commit y comprueba `/health/ready`.
@@ -206,3 +206,8 @@ Pruebas de sesión web, CSRF, privacidad y compatibilidad:
     pwsh -File scripts/Test-Posts.ps1 -Suite web
     pwsh -File scripts/Test-Posts.ps1 -Suite services
     pwsh -File scripts/Test-Posts.ps1 -Suite platform
+
+
+El acceso principal de vecinos y del panel usa nombre de usuario. Se conserva la
+entrada por correo para cuentas anteriores. El registro ya no exige correo y
+permite contraseñas de 1–128 caracteres. No se necesitan variables nuevas.

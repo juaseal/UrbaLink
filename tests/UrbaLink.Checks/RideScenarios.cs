@@ -21,7 +21,7 @@ internal static class RideScenarios
         static void Check(bool value,string message){if(!value)throw new Exception(message);}
         foreach(var c in new[]{admin,member,stranger})
         {
-            var session=await Post<SessionDto>(c,"api/auth/register",new RegisterRequest("Conductor",$"{Guid.NewGuid():N}@example.test","Ride-test-password-123"));
+            var session=await Post<SessionDto>(c,"api/auth/register",new RegisterRequest("Conductor "+Guid.NewGuid().ToString("N"),$"{Guid.NewGuid():N}@example.test","Ride-test-password-123"));
             c.DefaultRequestHeaders.Authorization=new AuthenticationHeaderValue("Bearer",session.Token);
         }
         var community=await Post<CommunityDto>(admin,"api/communities",new CreateCommunityRequest("Trayectos test"));
