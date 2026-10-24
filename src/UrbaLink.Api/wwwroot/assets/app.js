@@ -54,7 +54,7 @@ async function hydrate(){
  communities=await api('/api/communities');let saved;try{saved=localStorage.getItem('urbalink.community');}catch{}
  community=communities.find(c=>c.id===(community?.id||saved))||communities[0]||null;updateSelector();$('auth').hidden=true;$('starting').hidden=true;$('app').hidden=false;$('bell').hidden=false;await render();await refreshBell();
 }
-function updateSelector(){const select=$('community');select.replaceChildren();for(const c of communities){const option=el('option',c.name+(c.state!=='Active'?' · '+(c.state==='Pending'?'Pendiente':'Suspendida'):''));option.value=c.id;select.append(option);}select.value=community?.id||'';select.disabled=communities.length<2;select.closest('.communitybar').hidden=communities.length===0;}
+function updateSelector(){const select=$('community');select.replaceChildren();for(const c of communities){const option=el('option',c.name+(c.state!=='Active'?' · '+(c.state==='Pending'?'Pendiente':'Suspendida'):''));option.value=c.id;select.append(option);}select.value=community?.id||'';select.disabled=communities.length<2;select.closest('.communitybar').hidden=communities.length===0;$('community-search').hidden=!community||community.state!=='Active';}
 $('community').onchange=()=>run(async()=>{community=communities.find(c=>c.id===$('community').value);rememberCommunity();await go('home');});
 $('bell').onclick=()=>run(()=>go('messages'));
 window.addEventListener('hashchange',()=>{if(account)run(render);});window.addEventListener('popstate',()=>{if(account && currentRoute()!==lastRoute)run(render);});
@@ -84,6 +84,7 @@ async function render(){
  if(section==='board'){await board(new URLSearchParams(route.split('?')[1]||'').get('category'));return;}
  if(section==='rides'){await rides(new URLSearchParams(route.split('?')[1]||'').get('day'));return;}
  if(section==='new-ride'){rideForm();return;}
+ if(section==='search'){await communitySearch(new URLSearchParams(route.split('?')[1]||'').get('q')||'');return;}
  if(section==='new-post'){newPost();return;}
  await home();
 }
@@ -238,4 +239,11 @@ function rideForm(){
  departure=field(f,'Salida de ida','time',saved.departure||'08:00',{required:true});hasReturn=field(f,'También hago la vuelta','checkbox');hasReturn.checked=saved.hasReturn||false;back=field(f,'Salida de vuelta','time',saved.back||'18:00');nextDay=field(f,'Vuelvo al día siguiente','checkbox');nextDay.checked=saved.nextDay||false;const updateReturn=()=>{back.closest('label').hidden=nextDay.closest('label').hidden=!hasReturn.checked;back.required=hasReturn.checked;};hasReturn.onchange=updateReturn;updateReturn();
  seats=choice(f,'Plazas para pasajeros',Array.from({length:8},(_,i)=>[String(i+1),String(i+1)]),saved.seats||'1');price=field(f,'Precio por asiento y sentido (€)','number',saved.price||'0',{required:true,min:0,max:10000,step:'0.01'});f.append(text('0 € = gratis. El precio se aplica a cada sentido; el pago se acuerda entre vecinos.','muted'));detour=field(f,'Acepto hacer desvíos','checkbox');detour.checked=saved.detour||false;details=field(f,'Zonas o minutos de desvío','text',saved.details||'',{maxLength:300});const updateDetour=()=>details.closest('label').hidden=!detour.checked;detour.onchange=updateDetour;updateDetour();notes=field(f,'Observaciones (opcional)','textarea',saved.notes||'',{maxLength:1000});
  f.addEventListener('input',()=>{Object.assign(saved,{requestId:crypto.randomUUID(),origin:origin.value,destination:destination.value,meeting:meeting.value,days:checks.reduce((mask,c,i)=>mask|(c.checked?1<<i:0),0),departure:departure.value,hasReturn:hasReturn.checked,back:back.value,nextDay:nextDay.checked,seats:seats.value,price:price.value,detour:detour.checked,details:details.value,notes:notes.value});});f.finish();box.append(f,link('Cancelar','rides','button ghost'));view.append(box);
+}
+
+$('community-search').onsubmit=e=>{e.preventDefault();run(async()=>{const query=$('search-query').value.trim();if(!query)throw new ApiError(400,'Escribe una palabra para buscar.');await go('search?q='+encodeURIComponent(query));});};
+async function communitySearch(query){
+ query=query.trim();heading('Buscar en '+community.name,'Títulos y descripciones de publicaciones, servicios, compraventa, trayectos y animales.');$('search-query').value=query;if(!query){view.append(empty('Escribe una palabra en el buscador.'));return;}
+ const path=root()+'/search?q='+encodeURIComponent(query),data=await api(path);view.append(text('Resultados para «'+query+'»','muted'));const list=el('div');view.append(list);
+ const draw=items=>{for(const r of items){const route=`c/${community.id}/${{Post:'post',Item:'items',Animal:'animals'}[r.kind]}/${r.id}`,n=card();n.append(el('span',label(r.category),'badge'),el('h2'));n.querySelector('h2').append(link(r.title,route,''));n.append(text(r.description,'preview'),text(r.authorName+' · '+date(r.createdAt),'muted'),link('Ver detalles',route,'button ghost'));list.append(n);}};draw(data.items);if(!data.items.length)list.append(empty('No hay resultados para esta búsqueda. Prueba con otra palabra.'));let next=data.nextBefore;const more=button('Ver más resultados',async()=>{const page=await api(path+'&before='+encodeURIComponent(next));draw(page.items);next=page.nextBefore;more.hidden=next===null;},'secondary');more.hidden=next===null;view.append(more);
 }

@@ -605,3 +605,16 @@ de no leídos, denuncias, perfil, comunidades, invitaciones, papelera y restaura
 No se añaden pantallas nuevas a Android durante esta fase.
 
 Pruebas del acceso: `pwsh -File scripts/Test-Posts.ps1 -Suite email-auth`.
+## Buscar en la comunidad
+
+El buscador visible bajo el menú encuentra texto en títulos y descripciones de
+publicaciones del tablón, servicios, recomendaciones, trayectos, compraventa y
+avisos de animales de la comunidad seleccionada. No distingue mayúsculas ni tildes
+y busca el texto escrito literalmente (hasta 120 caracteres). Los resultados
+abren el detalle de su módulo y se cargan en páginas de 20, de más nuevos a antiguos.
+
+No busca comentarios ni conversaciones privadas, ni incluye contenido retirado
+o de otras comunidades. Los anuncios completados y avisos cerrados siguen siendo
+localizables mientras no se hayan retirado. No requiere migraciones ni variables.
+
+    pwsh -File scripts/Test-Posts.ps1 -Suite search

@@ -74,6 +74,7 @@ if (app.Services.GetService<NpgsqlDataSource>() is { } database)
         await Database.MigrateAsync(database);
     app.MapAccounts();
     app.MapPosts();
+    app.MapCommunitySearch();
     app.MapComments();
     app.MapCommunityManagement();
     app.MapMarket();
