@@ -1,6 +1,6 @@
 'use strict';
 const $=id=>document.getElementById(id),view=$('view'),feedback=$('feedback');
-const categories=[['General','General'],['Ayuda','Necesito ayuda'],['Ofrezco','Servicios'],['Recomendación','Recomendaciones'],['Material','Material'],['Coche','Trayectos'],['Aviso oficial','Aviso oficial']];
+const categories=[['General','General'],['Ayuda','Necesito ayuda'],['Ofrezco','Servicios'],['Recomendación','Recomendaciones'],['Material','Compraventa'],['Coche','Trayectos'],['Aviso oficial','Aviso oficial']];
 const label=key=>categories.find(x=>x[0]===key)?.[1]||key;
 let account=null,communities=[],community=null,busy=false,modalAction=null,lastRoute='',pendingNavigation=false;
 const drafts=new Map();
@@ -96,8 +96,9 @@ async function home(){
 }
 function postCard(p){const n=el('article',undefined,'post');n.append(el('span',label(p.category),'badge'),el('h3'));n.querySelector('h3').append(link(p.title,`c/${p.communityId}/post/${p.id}`,''));n.append(text(p.body,'preview'),text(`${p.authorName} · ${date(p.createdAt)}`,'muted'),link(p.category==='Ofrezco'?'Ver servicio y contactar':'Ver publicación',`c/${p.communityId}/post/${p.id}`,'button ghost'));return n;}
 async function board(category=null){
+ if(category==='Material'){await go('market');return;}
  const query=category?'?category='+encodeURIComponent(category):'';const data=await api(root()+'/posts'+query);heading('Tablón de '+community.name,'Lo que compartimos hace comunidad.');view.append(link('＋ Nueva publicación','new-post','button'));
- const filters=el('div',undefined,'filters');for(const [key,title]of [['','Todas'],['Ayuda y servicios','Ayuda y servicios'],...categories])filters.append(link(title,'board'+(key?'?category='+encodeURIComponent(key):''),key===(category||'')?'button':'button secondary'));view.append(filters);
+ const filters=el('div',undefined,'filters');for(const [key,title]of [['','Todas'],['Ayuda y servicios','Ayuda y servicios'],...categories])filters.append(link(title,key==='Material'?'market':'board'+(key?'?category='+encodeURIComponent(key):''),key===(category||'')?'button':'button secondary'));view.append(filters);
  const list=el('div');view.append(list);for(const p of data.items)list.append(postCard(p));if(!data.items.length)list.append(empty('No hay publicaciones en esta categoría.'));let next=data.nextBefore;
  const more=button('Ver publicaciones anteriores',async()=>{const page=await api(root()+'/posts'+query+(query?'&':'?')+'before='+next);for(const p of page.items)list.append(postCard(p));next=page.nextBefore;more.hidden=next===null;},'secondary');more.hidden=next===null;view.append(more);
 }
@@ -105,7 +106,7 @@ function newPost(){
  heading('Comparte con tus vecinos','Las publicaciones y sus comentarios son visibles para tu comunidad. En Servicios, el contacto es privado.');const options=el('div',undefined,'actions');options.append(link('Publicar objeto','new-item'),link('Ofrecer trayecto','new-ride'),link('Aviso de animal','new-animal'));view.append(options);const box=card();box.classList.add('narrow');
  const saved=drafts.get('new-post:'+community.id)||{};let title,body,category;
  const f=form('Publicar',async()=>{const p=await api(root()+'/posts','POST',{title:title.value,body:body.value,category:category.value});drafts.delete('new-post:'+community.id);await go(`c/${community.id}/post/${p.id}`);});
- title=field(f,'Título','text',saved.title||'',{required:true,minLength:3,maxLength:120});const catLabel=el('label','Categoría');category=el('select');for(const [key,value]of categories.filter(x=>x[0]!=='Coche'&&(x[0]!=='Aviso oficial'||community.role==='Admin'))){const option=el('option',value);option.value=key;category.append(option);}category.value=saved.category||'General';catLabel.append(category);f.append(catLabel);body=field(f,'¿Qué quieres compartir?','textarea',saved.body||'',{required:true,maxLength:4000});
+ title=field(f,'Título','text',saved.title||'',{required:true,minLength:3,maxLength:120});const catLabel=el('label','Categoría');category=el('select');for(const [key,value]of categories.filter(x=>!['Material','Coche'].includes(x[0])&&(x[0]!=='Aviso oficial'||community.role==='Admin'))){const option=el('option',value);option.value=key;category.append(option);}category.value=category.children.length&&[...category.children].some(o=>o.value===saved.category)?saved.category:'General';catLabel.append(category);f.append(catLabel);body=field(f,'¿Qué quieres compartir?','textarea',saved.body||'',{required:true,maxLength:4000});
  f.oninput=()=>drafts.set('new-post:'+community.id,{title:title.value,category:category.value,body:body.value});f.finish();box.append(f,link('Volver al tablón','board','button ghost'));view.append(box);
 }
 function report(kind,id,c=community){const requestId=crypto.randomUUID();ask('Denunciar','El equipo de UrbaLink revisará el contenido señalado y tu explicación. En mensajes privados solo se enviará el mensaje seleccionado.','Enviar denuncia',async reason=>{const r=await api('/api/reports','POST',{requestId,communityId:c.id,kind,targetId:Number(id),reason});feedback.textContent='Denuncia enviada. Referencia #'+r.id;},true);}
