@@ -35,7 +35,7 @@ en localStorage; solo se recuerda la comunidad seleccionada. Cerrar sesión revo
 esa sesión y conserva las sesiones de otros dispositivos.
 
 Se trabaja en la misma rama `main` y no hace falta otro servicio Railway, variables
-nuevas. Las migraciones 014 y 015 se aplican con el pre-deploy habitual. El Dockerfile existente publica también `wwwroot`.
+nuevas. Las migraciones 014–016 se aplican con el pre-deploy habitual. El Dockerfile existente publica también `wwwroot`.
 Consulta [DEPLOYMENT.md](DEPLOYMENT.md#web-de-vecinos-en-el-mismo-servicio) para actualizar.
 
     pwsh -File scripts/Test-Posts.ps1 -Suite web
@@ -47,7 +47,7 @@ Para revisar el navegador con datos ficticios y limpieza de la base al terminar:
 ## Qué funciona en esta entrega
 
 - Conexión automática de la app Android con el servidor de UrbaLink.
-- Registro con nombre de usuario único y contraseña de 1–128 caracteres; correo opcional en el perfil.
+- Registro e inicio de sesión con email obligatorio y contraseña de 1–128 caracteres.
 - Sesiones persistentes de 180 días, renovadas con el uso como máximo una vez al
   día en condiciones normales. Se guarda solo el token en SecureStorage, nunca
   la contraseña. Cerrar sesión revoca el acceso de ese dispositivo.
@@ -78,10 +78,10 @@ que represente oficialmente a una urbanización.
    e idempotente, con un bloqueo para evitar migraciones simultáneas.
 3. Ejecuta UrbaLink.Mobile de nuevo desde Visual Studio.
 4. La app abre directamente el acceso a tu cuenta. Para probar contra la API local, compila con `UrbaLinkServerUrl` como se indica en la sección de Wi-Fi.
-5. Pulsa **Quiero registrarme**. Elige un usuario único y una contraseña de 1–128 caracteres; no se pide correo.
+5. Pulsa **Quiero registrarme**. Indica tu nombre, email y una contraseña de 1–128 caracteres.
 6. Crea una comunidad, por ejemplo El Carambolo. Tu cuenta será administradora.
 7. Pulsa **Invitar**, copia el código y vuelve atrás.
-8. Cierra sesión y crea otra cuenta (otro nombre de usuario de pruebas).
+8. Cierra sesión y crea otra cuenta (otro correo de pruebas).
 9. Introduce el código para entrar como vecino. Esa cuenta no podrá invitar.
 
 Puedes volver a iniciar sesión con la primera cuenta. Los datos sobreviven al
@@ -582,17 +582,21 @@ incluidas las ya utilizadas. Se aplica mediante el pre-deploy habitual de Railwa
 
 Comprobaciones: `pwsh -File scripts/Test-Posts.ps1 -Suite accounts` y
 `node scripts/Test-WebCatalog.mjs`.
-## Acceso por nombre de usuario y funciones web
+## Acceso por email y funciones web
 
-El registro web pide un nombre de usuario único (sin distinguir mayúsculas) y una
-contraseña no vacía de hasta 128 caracteres. No solicita correo. En **Mi cuenta**
-se puede añadir, cambiar o retirar un correo opcional. Las contraseñas continúan
-almacenándose como hashes y las sesiones conservan la protección existente.
+El registro web pide nombre, email obligatorio y una contraseña no vacía de hasta
+128 caracteres. El único identificador de acceso es el email, tanto para vecinos
+como para el panel de plataforma. No hay un modo separado de acceso anterior.
+El nombre es visible en publicaciones y no se usa para iniciar sesión.
 
-La migración 015 conserva las cuentas y contraseñas anteriores. Usa el nombre
-existente como usuario y añade un sufijo a los duplicados. Las cuentas anteriores
-pueden entrar mediante **Entrar con el correo de mi cuenta anterior** y consultar
-su usuario asignado en el perfil. El panel de plataforma admite ambas formas.
+En **Mi cuenta** se puede actualizar el correo, pero no dejarlo vacío. Las sesiones
+y contraseñas anteriores se conservan. La migración 016 desactiva la unicidad de
+usuarios de la versión anterior sin borrar cuentas ni inventar correos.
+
+Las cuentas creadas sin email deben añadirlo desde su sesión abierta. Si ya no
+pueden acceder, el operador de plataforma puede añadir el correo facilitado por
+el vecino desde la lista de miembros. Solo permite completar cuentas sin correo,
+no sobrescribir direcciones existentes; la corrección queda auditada.
 
 La web reúne las funciones vecinales existentes de Android: inicio y avisos,
 tablón con todos sus filtros, comentarios, servicios y contacto privado,
@@ -600,4 +604,4 @@ compraventa/alquiler/subastas, animales, trayectos completos, mensajes y contado
 de no leídos, denuncias, perfil, comunidades, invitaciones, papelera y restauración.
 No se añaden pantallas nuevas a Android durante esta fase.
 
-Pruebas del acceso: `pwsh -File scripts/Test-Posts.ps1 -Suite usernames`.
+Pruebas del acceso: `pwsh -File scripts/Test-Posts.ps1 -Suite email-auth`.

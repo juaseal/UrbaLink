@@ -9,4 +9,5 @@
   <ItemGroup><PackageReference Include="Npgsql" Version="10.0.0" /></ItemGroup>
   <ItemGroup><None Update="Fixtures/*" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="../../src/UrbaLink.Api/Data/015_usernames.sql" LogicalName="UsernameMigration.sql" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="../../src/UrbaLink.Api/Data/016_email_authentication.sql" LogicalName="EmailMigration.sql" /></ItemGroup>
 </Project>

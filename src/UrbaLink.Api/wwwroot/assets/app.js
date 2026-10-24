@@ -38,16 +38,17 @@ function ask(title,body,confirm,action,reason=false){
  modalAction=async()=>{await action(input?.value.trim());$('modal').close();};$('modal').showModal();
 }
 $('modal-cancel').onclick=()=>$('modal').close();$('modal-form').onsubmit=e=>{e.preventDefault();if(modalAction)run(modalAction);};
-function login(register=false,legacy=false){
+function login(register=false){
  $('starting').hidden=true;$('auth').hidden=false;const auth=$('auth');auth.replaceChildren();
  const grid=el('div',undefined,'intro-grid'),intro=el('section',undefined,'intro');intro.append(text('CERCA DE TI','eyebrow'),el('h1','Tu comunidad, más cerca.'),text('Pide ayuda, comparte lo que sabes y conversa con quienes viven a tu lado. Todo empieza con tus vecinos.'));
- const panel=card(register?'Crea tu cuenta':'Bienvenido a tu comunidad',register?'Elige un nombre de usuario único. No necesitas correo electrónico.':'Entra con tu nombre de usuario y tu contraseña.');let name,password;
+ const panel=card(register?'Crea tu cuenta':'Bienvenido a tu comunidad','Entra con tu correo electrónico y tu contraseña.');let name,email,password;
  const f=form(register?'Crear cuenta':'Iniciar sesión',async()=>{
-  account=await api(register?'/api/web/register':'/api/web/session','POST',{...(register?{name:name.value}:legacy?{email:name.value}:{username:name.value}),password:password.value});password.value='';drafts.clear();await hydrate();
+  account=await api(register?'/api/web/register':'/api/web/session','POST',{...(register?{name:name.value}:{}),email:email.value,password:password.value});password.value='';drafts.clear();await hydrate();
  });
- name=field(f,legacy?'Correo de tu cuenta anterior':'Nombre de usuario',legacy?'email':'text','',{required:true,minLength:1,maxLength:legacy?254:80,autocomplete:'username'});
+ if(register)name=field(f,'Tu nombre','text','',{required:true,minLength:1,maxLength:80,autocomplete:'name'});
+ email=field(f,'Correo electrónico','email','',{required:true,maxLength:254,autocomplete:'username'});
  password=field(f,'Contraseña','password','',{required:true,minLength:1,maxLength:128,autocomplete:register?'new-password':'current-password'});
- f.finish();panel.append(f,text('En este dispositivo conservaremos tu sesión para que no tengas que entrar cada vez.','muted'),button(register?'Ya tengo cuenta':'Quiero registrarme',async()=>login(!register),'ghost'));if(!register)panel.append(button(legacy?'Entrar con nombre de usuario':'Entrar con el correo de mi cuenta anterior',async()=>login(false,!legacy),'ghost'));grid.append(intro,panel);auth.append(grid);
+ f.finish();panel.append(f,text('En este dispositivo conservaremos tu sesión para que no tengas que entrar cada vez.','muted'),button(register?'Ya tengo cuenta':'Quiero registrarme',async()=>login(!register),'ghost'));grid.append(intro,panel);auth.append(grid);
 }
 async function hydrate(){
  communities=await api('/api/communities');let saved;try{saved=localStorage.getItem('urbalink.community');}catch{}
@@ -61,6 +62,7 @@ document.addEventListener('click',e=>{
  const a=e.target.closest('a[href^="#"]');if(!a)return;e.preventDefault();if(account)run(()=>go(a.getAttribute('href').slice(1)));else if(a.classList.contains('brand'))login();
 });
 async function render(){
+ if(!account.email){profile();feedback.textContent='Añade tu correo para volver a iniciar sesión. Conservas tu contraseña y todos tus datos.';return;}
  const route=currentRoute();lastRoute=route;const parts=route.split('?')[0].split('/');
  if(parts[0]==='c'){
   const selected=communities.find(c=>c.id===parts[1]);if(!selected)throw new ApiError(403,'No tienes acceso a esta comunidad. Comprueba tu cuenta o entra con una invitación.');community=selected;rememberCommunity();updateSelector();
@@ -150,11 +152,11 @@ function createCommunity(){
  heading('Un espacio para tu comunidad','UrbaLink revisará tu solicitud antes de que puedas invitar vecinos y publicar.');const box=card();box.classList.add('narrow');let name;const f=form('Solicitar comunidad',async()=>{community=await api('/api/communities','POST',{name:name.value});rememberCommunity();history.replaceState(null,'','#home');await hydrate();});name=field(f,'Nombre de la comunidad','text','',{required:true,minLength:2,maxLength:100});f.finish();box.append(f);view.append(box);
 }
 function profile(){
- heading('Mi cuenta');const identity=card(account.username||account.name,'Tu nombre de usuario es único. El correo electrónico es opcional.');let email;const edit=form('Guardar perfil',async()=>{account=await api('/api/me','PUT',{email:email.value});feedback.textContent='Perfil guardado.';});email=field(edit,'Correo electrónico (opcional)','email',account.email||'',{maxLength:254,autocomplete:'email'});edit.finish();identity.append(edit);view.append(identity);
+ heading('Mi cuenta');const identity=card(account.name,'Tu correo electrónico es el identificador para iniciar sesión.');let email;const edit=form('Guardar perfil',async()=>{account=await api('/api/me','PUT',{email:email.value});feedback.textContent='Perfil guardado.';});email=field(edit,'Correo electrónico','email',account.email||'',{required:true,maxLength:254,autocomplete:'email'});edit.finish();identity.append(edit);view.append(identity);
  for(const c of communities){const n=card(c.name,c.role==='Admin'?'Administrador de comunidad':'Vecino');if(c.state!=='Active')n.append(text(c.state==='Pending'?'Pendiente de aprobación':'Comunidad suspendida','muted'));n.append(button('Abrir comunidad',async()=>{community=c;rememberCommunity();updateSelector();await go('home');},'secondary'));
  if(c.role==='Admin' && c.state==='Active')n.append(link('Invitar vecinos',`c/${c.id}/invitations`,'button ghost'),button('Eliminar comunidad',async()=>deleteCommunity(c),'danger'));
  if(c.state==='Active')n.append(button('Denunciar comunidad',async()=>report('Community',0,c),'ghost'));view.append(n);}
- const actions=el('div',undefined,'actions');actions.append(link('Unirme con una invitación','join'),link('Solicitar comunidad','create-community'),link('Papelera de comunidades','trash'),button('Cerrar sesión',async()=>ask('Cerrar sesión','Podrás volver a entrar con tu usuario y contraseña.','Cerrar sesión',async()=>{await api('/api/auth/logout','POST');reset();history.replaceState(null,'','#home');login();}),'danger'));view.append(actions);
+ const actions=el('div',undefined,'actions');actions.append(link('Unirme con una invitación','join'),link('Solicitar comunidad','create-community'),link('Papelera de comunidades','trash'),button('Cerrar sesión',async()=>ask('Cerrar sesión','Podrás volver a entrar con tu correo y contraseña.','Cerrar sesión',async()=>{await api('/api/auth/logout','POST');reset();history.replaceState(null,'','#home');login();}),'danger'));view.append(actions);
 }
 async function refreshBell(){if(!account||document.hidden)return;try{const n=await api('/api/notifications/count');$('unread').textContent=n.unreadCount>0?(n.unreadCount>99?'99+':String(n.unreadCount)):'';$('bell').setAttribute('aria-label','Mensajes privados: '+n.unreadCount+' sin leer');}catch{$('bell').setAttribute('aria-label','Mensajes privados. No se pudo actualizar el contador.');}}
 setInterval(()=>{if(!busy)refreshBell();},10000);document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!busy)refreshBell();});

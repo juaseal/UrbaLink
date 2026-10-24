@@ -92,7 +92,17 @@ internal static class PlatformScenarios
         await Expect(await platform.PostAsJsonAsync("api/platform/users/"+users[1].Account.Id+"/state",new{state="Suspended",reason="Suspensión global de prueba"}),HttpStatusCode.NoContent);
         await Expect(await member.GetAsync("api/me"),HttpStatusCode.Unauthorized);
         await Expect(await platform.PostAsJsonAsync("api/platform/users/"+fixedId+"/state",new{state="Suspended",reason="Auto suspensión"}),HttpStatusCode.Conflict);
-        var audit=await platform.GetStringAsync("api/platform/audit");Check(audit.Contains("ReadReport")&&audit.Contains("Member:Blocked"),"Auditoría ausente");
+        // Only platform admins may attach a missing email; existing emails cannot be overwritten.
+        var emailPath="api/platform/users/"+users[2].Account.Id+"/email";
+        await Expect(await owner.PutAsJsonAsync(emailPath,new{email="restored@example.test",reason="Corrección de cuenta sin correo"}),HttpStatusCode.Unauthorized);
+        await using(var command=new NpgsqlCommand("UPDATE users SET email=NULL WHERE id=$1",db))
+        {command.Parameters.AddWithValue(users[2].Account.Id);await command.ExecuteNonQueryAsync();}
+        await Expect(await platform.PutAsJsonAsync(emailPath,new{email=users[0].Account.Email,reason="Correo duplicado de prueba"}),HttpStatusCode.Conflict);
+        await Expect(await platform.PutAsJsonAsync(emailPath,new{email="restored@example.test",reason="Corrección de cuenta sin correo"}),HttpStatusCode.NoContent);
+        await Expect(await platform.PutAsJsonAsync(emailPath,new{email="overwrite@example.test",reason="No sobrescribir un correo existente"}),HttpStatusCode.Conflict);
+        var restored=await Post<SessionDto>(stranger,"api/auth/login",new LoginRequest("restored@example.test","Platform-test-password-123"));
+        Check(restored.Account.Id==users[2].Account.Id,"Asignar correo cambia la cuenta o la contraseña");
+        var audit=await platform.GetStringAsync("api/platform/audit");Check(audit.Contains("ReadReport")&&audit.Contains("Member:Blocked")&&audit.Contains("AssignMissingEmail"),"Auditoría ausente");
         using(var response=await owner.GetAsync("admin/")){Check(response.IsSuccessStatusCode,"Panel no servido");Check(response.Headers.Contains("Content-Security-Policy"),"Falta CSP");}
         await Expect(await platform.DeleteAsync("api/platform/session"),HttpStatusCode.NoContent);
         await Expect(await platform.GetAsync("api/platform/communities"),HttpStatusCode.Unauthorized);

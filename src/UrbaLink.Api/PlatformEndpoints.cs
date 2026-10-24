@@ -6,8 +6,9 @@ namespace UrbaLink.Api;
 
 public static class PlatformEndpoints
 {
-    public sealed record LoginInput(string? Email,string Password,string? Username=null);
+    public sealed record LoginInput(string? Email,string Password);
     public sealed record Decision(string State,string Reason);
+    public sealed record MissingEmailInput(string Email,string Reason);
     private static readonly PasswordHasher<string> Hasher=new();
     private static readonly string DummyHash=Hasher.HashPassword("",Tokens.New());
     private static IResult Error(string message,int code=400)=>Results.Json(new ApiError(message),statusCode:code);
@@ -25,6 +26,7 @@ public static class PlatformEndpoints
         g.MapPost("/communities/{id:guid}/state",CommunityState);
         g.MapPost("/communities/{id:guid}/users/{userId:guid}/state",MemberState);
         g.MapPost("/users/{id:guid}/state",UserState);
+        g.MapPut("/users/{id:guid}/email",AssignMissingEmail);
         g.MapPost("/communities/{id:guid}/content/{kind}/{target:long}/remove",Remove);
         g.MapGet("/reports",Reports);
         g.MapGet("/reports/{id:long}",ReportDetail);
@@ -33,11 +35,11 @@ public static class PlatformEndpoints
     }
     private static async Task<IResult> Login(LoginInput input,NpgsqlDataSource db,IConfiguration config,CancellationToken ct)
     {
-        var email=input.Username is not null?input.Username.Trim():input.Email?.Trim().ToLowerInvariant()??"";
-        if(email.Length>254 || input.Password is null || input.Password.Length is <1 or >128)return Error("Acceso no válido.",401);
+        var email=AccountEndpoints.NormalizeEmail(input.Email);
+        if(!AccountEndpoints.ValidEmail(email) || input.Password is null || input.Password.Length is <1 or >128)return Error("Acceso no válido.",401);
         await using var c=await db.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);
         Guid? uid=null;var hash=DummyHash;
-        await using(var q=Database.Command(c,"SELECT id,password_hash FROM users WHERE (CASE WHEN $2 THEN lower(username)=lower($1) ELSE email=$1 END) AND NOT is_suspended FOR SHARE",email,input.Username is not null))
+        await using(var q=Database.Command(c,"SELECT id,password_hash FROM users WHERE email=$1 AND NOT is_suspended FOR SHARE",email))
         await using(var r=await q.ExecuteReaderAsync(ct)){if(await r.ReadAsync(ct)){uid=r.GetGuid(0);hash=r.GetString(1);}}
         var password=Hasher.VerifyHashedPassword(email,hash,input.Password);
         if(uid is not {} id || password==PasswordVerificationResult.Failed || !IsAdmin(config,id))return Error("Acceso no válido. Comprueba credenciales y autorización.",401);
@@ -94,6 +96,25 @@ public static class PlatformEndpoints
             """,offset,ct,id);
     });
     private static bool ValidReason(Decision d)=>d.Reason?.Trim().Length is >=5 and <=2000;
+    private static Task<IResult> AssignMissingEmail(Guid id,MissingEmailInput input,HttpContext h,NpgsqlDataSource db,IConfiguration config,CancellationToken ct)=>With(h,db,config,ct,async(c,uid)=>
+    {
+        var email=AccountEndpoints.NormalizeEmail(input.Email);
+        if(!AccountEndpoints.ValidEmail(email)||input.Reason?.Trim().Length is not (>=5 and <=2000))
+            return Error("Indica un correo válido y el motivo de la corrección.");
+        await Database.Execute(c,ct,"SAVEPOINT assign_missing_email");
+        try
+        {
+            await using var command=Database.Command(c,"UPDATE users SET email=$1 WHERE id=$2 AND email IS NULL",email,id);
+            if(await command.ExecuteNonQueryAsync(ct)!=1)return Error("Cuenta no disponible o con un correo ya asociado.",409);
+            await Audit(c,uid,"AssignMissingEmail",id.ToString(),input.Reason.Trim(),ct);
+            return Results.NoContent();
+        }
+        catch(PostgresException e) when(e.SqlState==PostgresErrorCodes.UniqueViolation)
+        {
+            await Database.Execute(c,ct,"ROLLBACK TO SAVEPOINT assign_missing_email");
+            return Error("Ese correo ya está asociado a otra cuenta.",409);
+        }
+    });
     private static Task<IResult> CommunityState(Guid id,Decision input,HttpContext h,NpgsqlDataSource db,IConfiguration config,CancellationToken ct)=>With(h,db,config,ct,async(c,uid)=>
     {
         if(!ValidReason(input) || input.State is not ("Active" or "Suspended"))return Error("Indica un estado y un motivo de 5–2000 caracteres.");

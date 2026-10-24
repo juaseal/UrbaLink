@@ -193,8 +193,9 @@ La migración 014 añade límite y contador a las invitaciones, con actualizaci�
 atómica bajo el mismo bloqueo de invitación que la incorporación de miembros.
 La revocación invalida el código sin retirar membresías ya creadas.
 
-La migración 015 añade usuario único con índice sobre `lower(username)`, conserva
-las contraseñas anteriores y hace nullable el correo. El registro admite contraseñas
-no vacías de hasta 128 caracteres. El correo se modifica en `/api/me`; no cambia
-el usuario ni revoca las sesiones. El acceso por usuario y la compatibilidad por
-correo usan campos de solicitud distintos para evitar identidades ambiguas.
+La migración 015 añadió usuarios únicos. La 016 vuelve a email como identificador
+de acceso, conservando los datos históricos de usuario y las contraseñas. El correo
+es obligatorio en registro, acceso y actualización de perfil; las filas anteriores
+sin correo se conservan hasta que su titular lo complete. El operador de plataforma
+solo puede asignar correo a cuentas que carecen de él, con auditoría y sin cambiar
+contraseñas. El nombre visible deja de ser un identificador de autenticación.

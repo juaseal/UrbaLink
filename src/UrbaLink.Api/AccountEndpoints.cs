@@ -36,7 +36,7 @@ public static class AccountEndpoints
         return new SessionDto(token, expiry, account);
     }
 
-    private static string NormalizeEmail(string? email) => (email ?? "").Trim().ToLowerInvariant();
+    internal static string NormalizeEmail(string? email) => (email ?? "").Trim().ToLowerInvariant();
 
     internal static async Task<IResult> Register(RegisterRequest request, NpgsqlDataSource source, CancellationToken ct)
     {
@@ -44,17 +44,17 @@ public static class AccountEndpoints
         var email = NormalizeEmail(request.Email);
         if (name.Length is < 1 or > 80 || !ValidEmail(email) ||
             request.Password is null || request.Password.Length is < 1 or > 128)
-            return Error("Elige un nombre de usuario de 1–80 caracteres y una contraseña de 1–128 caracteres. El correo es opcional.");
+            return Error("Indica tu nombre, un correo válido y una contraseña de 1–128 caracteres.");
 
-        var account = new AccountDto(Guid.NewGuid(), name, email, name);
-        var hash = Hasher.HashPassword(name, request.Password);
+        var account = new AccountDto(Guid.NewGuid(), name, email);
+        var hash = Hasher.HashPassword(email, request.Password);
         await using var connection = await source.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
         try
         {
             await using var command = Database.Command(connection,
-                "INSERT INTO users(id,name,email,password_hash,username) VALUES ($1,$2,$3,$4,$2)",
-                account.Id, name, email.Length==0?null:email, hash);
+                "INSERT INTO users(id,name,email,password_hash) VALUES ($1,$2,$3,$4)",
+                account.Id, name, email, hash);
             await command.ExecuteNonQueryAsync(ct);
             var session = await NewSession(connection, account, ct);
             await transaction.CommitAsync(ct);
@@ -62,32 +62,32 @@ public static class AccountEndpoints
         }
         catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.UniqueViolation)
         {
-            return Error(exception.ConstraintName=="users_username_unique"?"Ese nombre de usuario ya está ocupado. Elige otro.":"Ese correo ya está asociado a otra cuenta.", 409);
+            return Error("Ese correo ya está asociado a otra cuenta.", 409);
         }
     }
 
     internal static async Task<IResult> Login(LoginRequest request, NpgsqlDataSource source, CancellationToken ct)
     {
-        var identifier = request.Username is not null ? request.Username.Trim() : NormalizeEmail(request.Email);
-        if (identifier.Length is < 1 or > 254 || request.Password is null || request.Password.Length is < 1 or > 128)
-            return Error("Usuario o contraseña incorrectos.", 401);
+        var identifier = NormalizeEmail(request.Email);
+        if (!ValidEmail(identifier) || request.Password is null || request.Password.Length is < 1 or > 128)
+            return Error("Correo o contraseña incorrectos.", 401);
 
         await using var connection = await source.OpenConnectionAsync(ct);
         AccountDto? account = null;
         var hash = DummyHash;
         await using (var command = Database.Command(connection,
-            "SELECT id,name,email,password_hash,username FROM users WHERE (CASE WHEN $2 THEN lower(username)=lower($1) ELSE email=$1 END) AND NOT is_suspended", identifier, request.Username is not null))
+            "SELECT id,name,email,password_hash FROM users WHERE email=$1 AND NOT is_suspended", identifier))
         await using (var reader = await command.ExecuteReaderAsync(ct))
         {
             if (await reader.ReadAsync(ct))
             {
-                account = new AccountDto(reader.GetGuid(0), reader.GetString(1), reader.IsDBNull(2)?"":reader.GetString(2), reader.GetString(4));
+                account = new AccountDto(reader.GetGuid(0), reader.GetString(1), reader.GetString(2));
                 hash = reader.GetString(3);
             }
         }
         var verified = Hasher.VerifyHashedPassword(identifier, hash, request.Password);
         if (account is null || verified == PasswordVerificationResult.Failed)
-            return Error("Usuario o contraseña incorrectos.", 401);
+            return Error("Correo o contraseña incorrectos.", 401);
         if (verified == PasswordVerificationResult.SuccessRehashNeeded)
         {
             await using var update = Database.Command(connection,
@@ -102,27 +102,27 @@ public static class AccountEndpoints
     {
         await using var connection = await source.OpenConnectionAsync(ct);
         await using var command = Database.Command(connection,
-            "SELECT id,name,email,username FROM users WHERE id=$1", Tokens.UserId(principal));
+            "SELECT id,name,email FROM users WHERE id=$1", Tokens.UserId(principal));
         await using var reader = await command.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct)
-            ? Results.Ok(new AccountDto(reader.GetGuid(0), reader.GetString(1), reader.IsDBNull(2)?"":reader.GetString(2), reader.GetString(3)))
+            ? Results.Ok(new AccountDto(reader.GetGuid(0), reader.GetString(1), reader.IsDBNull(2)?"":reader.GetString(2)))
             : Results.Unauthorized();
     }
 
-    private static bool ValidEmail(string email) => email.Length==0 ||
-        (email.Length<=254 && MailAddress.TryCreate(email,out var parsed) && parsed.Address==email);
+    internal static bool ValidEmail(string email) => email.Length is >=1 and <=254 &&
+        MailAddress.TryCreate(email,out var parsed) && parsed.Address==email;
 
     private static async Task<IResult> UpdateProfile(UpdateProfileRequest request, ClaimsPrincipal principal, NpgsqlDataSource source, CancellationToken ct)
     {
         var email=NormalizeEmail(request.Email);
-        if(!ValidEmail(email))return Error("Indica un correo válido o deja el campo vacío.");
+        if(!ValidEmail(email))return Error("El correo es obligatorio. Indica una dirección válida.");
         await using var connection=await source.OpenConnectionAsync(ct);
         try
         {
-            await using var command=Database.Command(connection,"UPDATE users SET email=$1 WHERE id=$2 RETURNING id,name,email,username",email.Length==0?null:email,Tokens.UserId(principal));
+            await using var command=Database.Command(connection,"UPDATE users SET email=$1 WHERE id=$2 RETURNING id,name,email",email,Tokens.UserId(principal));
             await using var reader=await command.ExecuteReaderAsync(ct);
             return await reader.ReadAsync(ct)
-                ? Results.Ok(new AccountDto(reader.GetGuid(0),reader.GetString(1),reader.IsDBNull(2)?"":reader.GetString(2),reader.GetString(3)))
+                ? Results.Ok(new AccountDto(reader.GetGuid(0),reader.GetString(1),reader.GetString(2)))
                 : Results.Unauthorized();
         }
         catch(PostgresException e) when(e.SqlState==PostgresErrorCodes.UniqueViolation)
