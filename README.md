@@ -618,3 +618,13 @@ o de otras comunidades. Los anuncios completados y avisos cerrados siguen siendo
 localizables mientras no se hayan retirado. No requiere migraciones ni variables.
 
     pwsh -File scripts/Test-Posts.ps1 -Suite search
+
+## Avisos mientras la web está abierta
+
+El contador de mensajes muestra un aviso dentro de la página al detectar nuevos
+mensajes pendientes, con acceso a la bandeja y opción de cerrarlo. El título de
+la pestaña refleja el número de no leídos. El aviso no se repite por el mismo
+mensaje al cerrar la tarjeta; vuelve a aparecer cuando llega otro mensaje.
+Se actualiza aproximadamente cada diez segundos, también en una pestaña abierta
+en segundo plano (sujeto a la frecuencia que permita el navegador).
+No solicita permisos del dispositivo ni utiliza notificaciones push con la web cerrada.

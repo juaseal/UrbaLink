@@ -64,6 +64,9 @@ internal static class WebScenarios
         await Expect(await stranger.GetAsync(messages),HttpStatusCode.NotFound);
         var history=(await owner.GetFromJsonAsync<MarketMessagePage>(messages))!;
         Check(history.Items.Length==1,"Reintento web duplica mensaje");
+        var unread=(await owner.GetFromJsonAsync<NotificationCount>("api/notifications/count"))!;
+        Check(unread.UnreadCount==1&&unread.LatestMessageId==history.Items[0].Id,"El aviso no identifica el mensaje nuevo");
+        Check((await stranger.GetFromJsonAsync<NotificationCount>("api/notifications/count"))!.LatestMessageId==0,"El aviso expone actividad ajena");
         await Expect(await owner.PostAsJsonAsync(messages+"/read",new MessageReadRequest(history.Items[0].Id)),HttpStatusCode.NoContent);
         Check((await owner.GetFromJsonAsync<ConversationInbox>("api/conversations"))!.Items.Single().UnreadCount==0,"Se pierde el chat tras leerlo");
         Check((await owner.GetFromJsonAsync<NotificationCount>("api/notifications/count"))!.UnreadCount==0,"La lectura no actualiza la campana");

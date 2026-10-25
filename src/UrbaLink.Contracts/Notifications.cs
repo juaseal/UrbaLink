@@ -5,4 +5,4 @@ public sealed record MessageNotification(Guid CommunityId, string CommunityName,
     long ItemId, string ItemTitle, long ConversationId, int UnreadCount, string SenderName, string Preview, string Kind = "Object");
 public sealed record NotificationInbox(int UnreadCount, MessageNotification[] Items);
 
-public sealed record NotificationCount(int UnreadCount);
+public sealed record NotificationCount(int UnreadCount,long LatestMessageId=0);

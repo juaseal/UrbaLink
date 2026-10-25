@@ -35,8 +35,9 @@ public static class NotificationEndpoints
     private static async Task<IResult> Count(ClaimsPrincipal user,NpgsqlDataSource source,CancellationToken ct)
     {
         await using var c=await source.OpenConnectionAsync(ct);
-        await using var q=Database.Command(c,Unread+" SELECT COALESCE(sum(unread_count),0)::int FROM unread",Tokens.UserId(user));
-        return Results.Ok(new NotificationCount((int)(await q.ExecuteScalarAsync(ct))!));
+        await using var q=Database.Command(c,Unread+" SELECT COALESCE(sum(unread_count),0)::int,COALESCE(max(latest),0)::bigint FROM unread",Tokens.UserId(user));
+        await using var reader=await q.ExecuteReaderAsync(ct);await reader.ReadAsync(ct);
+        return Results.Ok(new NotificationCount(reader.GetInt32(0),reader.GetInt64(1)));
     }
 
     private static async Task<IResult> Notifications(ClaimsPrincipal user,NpgsqlDataSource source,CancellationToken ct)

@@ -3,6 +3,7 @@ const $=id=>document.getElementById(id),view=$('view'),feedback=$('feedback');
 const categories=[['General','General'],['Ayuda','Necesito ayuda'],['Ofrezco','Servicios'],['Recomendación','Recomendaciones'],['Material','Compraventa'],['Coche','Trayectos'],['Aviso oficial','Aviso oficial']];
 const label=key=>categories.find(x=>x[0]===key)?.[1]||key;
 let account=null,communities=[],community=null,busy=false,modalAction=null,lastRoute='',pendingNavigation=false;
+let notificationAccount=null,notificationLatest=0,notificationBusy=false;
 const drafts=new Map();
 class ApiError extends Error{constructor(status,message){super(message);this.status=status;}}
 async function api(path,method='GET',data){
@@ -31,7 +32,7 @@ async function run(fn){
   else{feedback.textContent=e instanceof ApiError?e.message:'No se pudo conectar. Comprueba tu conexión e inténtalo de nuevo.';if($('modal').open)$('modal-error').textContent=feedback.textContent;}
  }finally{busy=false;for(const [n,disabled]of fields)if(n.isConnected)n.disabled=disabled;document.querySelectorAll('button').forEach(b=>b.disabled=false);if(pendingNavigation){pendingNavigation=false;if(account && currentRoute()!==lastRoute)await run(render);}}
 }
-function reset(){account=null;communities=[];community=null;drafts.clear();view.replaceChildren();$('app').hidden=true;$('bell').hidden=true;$('modal').close();modalAction=null;}
+function reset(){account=null;communities=[];community=null;drafts.clear();view.replaceChildren();$('app').hidden=true;$('bell').hidden=true;$('message-notice').hidden=true;notificationAccount=null;notificationLatest=0;document.title='UrbaLink · Tu comunidad';$('modal').close();modalAction=null;}
 function ask(title,body,confirm,action,reason=false){
  $('modal-title').textContent=title;$('modal-body').textContent=body;$('modal-submit').textContent=confirm;$('modal-error').textContent='';$('modal-fields').replaceChildren();
  let input;if(reason)input=field($('modal-fields'),'Motivo','textarea','',{required:true,minLength:5,maxLength:2000});
@@ -160,7 +161,13 @@ function profile(){
  if(c.state==='Active')n.append(button('Denunciar comunidad',async()=>report('Community',0,c),'ghost'));view.append(n);}
  const actions=el('div',undefined,'actions');actions.append(link('Unirme con una invitación','join'),link('Solicitar comunidad','create-community'),link('Papelera de comunidades','trash'),button('Cerrar sesión',async()=>ask('Cerrar sesión','Podrás volver a entrar con tu correo y contraseña.','Cerrar sesión',async()=>{await api('/api/auth/logout','POST');reset();history.replaceState(null,'','#home');login();}),'danger'));view.append(actions);
 }
-async function refreshBell(){if(!account||document.hidden)return;try{const n=await api('/api/notifications/count');$('unread').textContent=n.unreadCount>0?(n.unreadCount>99?'99+':String(n.unreadCount)):'';$('bell').setAttribute('aria-label','Mensajes privados: '+n.unreadCount+' sin leer');}catch{$('bell').setAttribute('aria-label','Mensajes privados. No se pudo actualizar el contador.');}}
+async function refreshBell(){
+ if(!account||notificationBusy)return;notificationBusy=true;const viewer=account.id;
+ try{const n=await api('/api/notifications/count');if(account?.id!==viewer)return;if(notificationAccount!==viewer){notificationAccount=viewer;notificationLatest=0;}
+  const count=n.unreadCount||0;$('unread').textContent=count>0?(count>99?'99+':String(count)):'';$('bell').setAttribute('aria-label','Mensajes privados: '+count+' sin leer');$('bell').setAttribute('data-unread',String(count>0));document.title=(count?'('+count+') ':'')+'UrbaLink · Tu comunidad';
+  if(!count)$('message-notice').hidden=true;else if(n.latestMessageId>notificationLatest){notificationLatest=n.latestMessageId;const notice=$('message-notice');notice.replaceChildren(el('strong',count===1?'Tienes un mensaje sin leer':'Tienes '+count+' mensajes sin leer'),text('Puedes abrir tus conversaciones para responder.'),link('Ver mensajes','messages','button'),button('Cerrar aviso',async()=>{notice.hidden=true;},'ghost'));notice.hidden=false;}
+ }catch{if(account?.id===viewer)$('bell').setAttribute('aria-label','Mensajes privados. No se pudo actualizar el contador.');}finally{notificationBusy=false;}
+}
 setInterval(()=>{if(!busy)refreshBell();},10000);document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!busy)refreshBell();});
 async function boot(){try{account=await api('/api/me');}catch(e){if(e.status===401){login();return;}login();throw e;}await hydrate();}
 $('start-retry').onclick=()=>run(boot);
