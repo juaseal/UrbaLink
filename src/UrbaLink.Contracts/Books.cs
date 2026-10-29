@@ -3,7 +3,7 @@ namespace UrbaLink.Contracts;
 public sealed record BookInput(Guid RequestId,string Title,string Author,string Isbn,string Condition,
     string Audience,string Mode,string Description,byte[]? Photo);
 public sealed record BookDto(long Id,Guid CommunityId,Guid OwnerId,string OwnerName,string Title,string Author,
-    string Isbn,string Condition,string Audience,string Mode,string Description,byte[] Photo,string State,int Version);
+    string Isbn,string Condition,string Audience,string Mode,string Description,byte[]? Photo,string State,int Version);
 public sealed record BookPage(BookDto[] Items,long? NextBefore);
 public sealed record BookDetail(BookDto Book,MarketConversationDto[] Conversations);
 public sealed record BookStateRequest(string State);
@@ -18,7 +18,7 @@ public static class BookRules
             return "Revisa el título, autor, ISBN (hasta 32 caracteres) y descripción (hasta 2000).";
         if(r.Condition is not ("New" or "LikeNew" or "Good" or "Worn")||r.Audience is not ("Adult" or "Young" or "Child" or "Baby")||r.Mode is not ("Lend" or "Pass"))
             return "Selecciona estado del libro, público y si lo prestas o lo pasas.";
-        if(r.Photo is null||!MarketPhotoRules.IsValid(r.Photo))return "Añade una foto JPEG válida del libro (hasta 40 KB).";
+        if(r.Photo is not null&&!MarketPhotoRules.IsValid(r.Photo))return "La foto debe ser un JPEG válido de hasta 40 KB. Puedes publicar sin foto.";
         return null;
     }
 }

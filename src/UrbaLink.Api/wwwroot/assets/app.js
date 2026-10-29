@@ -7,10 +7,13 @@ let notificationAccount=null,notificationLatest=0,notificationBusy=false;
 const drafts=new Map();
 class ApiError extends Error{constructor(status,message){super(message);this.status=status;}}
 async function api(path,method='GET',data){
- const response=await fetch(path,{method,credentials:'same-origin',cache:'no-store',headers:{'X-UrbaLink-Web':'1',...(data!==undefined?{'Content-Type':'application/json'}:{})},body:data!==undefined?JSON.stringify(data):undefined});
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),30000);try{
+ const response=await fetch(path,{method,signal:controller.signal,credentials:'same-origin',cache:'no-store',headers:{'X-UrbaLink-Web':'1',...(data!==undefined?{'Content-Type':'application/json'}:{})},body:data!==undefined?JSON.stringify(data):undefined});
  if(!response.ok){let body={};try{body=await response.json();}catch{}throw new ApiError(response.status,body.message||(response.status===429?'Demasiados intentos. Espera un minuto.':'No se pudo completar la operación. Inténtalo de nuevo.'));}
- return response.status===204?null:response.json();
+ return response.status===204?null:await response.json();
+ }catch(e){if(e instanceof ApiError)throw e;if(e.name==='AbortError')throw new ApiError(408,'La solicitud está tardando demasiado. Comprueba tu conexión y vuelve a intentarlo.');throw new ApiError(0,'No se pudo conectar. Comprueba tu conexión e inténtalo de nuevo.');}finally{clearTimeout(timeout);}
 }
+function errorText(e){return e instanceof ApiError?e.message:'No se pudo completar la operación. Vuelve a intentarlo.';}
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
 function sectionIcon(name){const n=el('img',undefined,'ui-icon');n.src='/assets/icons/'+name+'.svg';n.alt='';n.width=24;n.height=24;n.setAttribute('aria-hidden','true');return n;}
 function date(value){return new Date(value).toLocaleString('es-ES',{dateStyle:'medium',timeStyle:'short'});}
@@ -18,7 +21,12 @@ function link(text,route,cls='button secondary'){const a=el('a',text,cls);a.href
 function button(text,fn,cls=''){const b=el('button',text,cls);b.type='button';b.onclick=()=>run(fn);return b;}
 function text(value,cls=''){return el('p',value,cls);}
 function field(form,title,type='text',value='',options={}){const l=el('label',title),n=el(type==='textarea'?'textarea':'input');if(type!=='textarea')n.type=type;n.value=value;for(const [k,v]of Object.entries(options))n[k]=v;l.append(n);form.append(l);return n;}
-function form(submitLabel,action){const f=el('form'),submit=el('button',submitLabel);submit.type='submit';f.onsubmit=e=>{e.preventDefault();run(()=>action(f));};f.finish=()=>f.append(submit);return f;}
+function form(submitLabel,action,pendingLabel='Enviando…'){
+ const f=el('form'),submit=el('button',submitLabel),status=el('p',undefined,'form-status');submit.type='submit';status.hidden=true;status.tabIndex=-1;status.setAttribute('role','alert');
+ f.clearError=()=>{status.hidden=true;status.textContent='';};f.showError=e=>{status.textContent=errorText(e);status.hidden=false;status.focus();};
+ f.onsubmit=e=>{e.preventDefault();return run(async()=>{f.clearError();submit.textContent=pendingLabel;f.setAttribute('aria-busy','true');try{await action(f);}catch(error){f.showError(error);throw error;}finally{submit.textContent=submitLabel;f.removeAttribute('aria-busy');}});};
+ f.finish=()=>f.append(status,submit);return f;
+}
 function card(title,body,iconName){const n=el('section',undefined,'card');if(title){const h=el('h2');if(iconName){h.className='card-title';h.append(sectionIcon(iconName),el('span',title));}else h.textContent=title;n.append(h);}if(body)n.append(text(body,'muted'));return n;}
 function heading(title,description){const parts=currentRoute().split('?')[0].split('/'),section=parts[0]==='c'?({post:'board',chat:'messages',items:'market',animals:'animals',books:'library',invitations:'community'}[parts[2]]):parts[0],iconName={home:'home',board:'board',market:'market',library:'library',rides:'rides',animals:'animals',messages:'messages',profile:'profile',community:'community',search:'search',trash:'trash',join:'community','create-community':'community','new-post':'board','new-item':'market','new-book':'library','new-ride':'rides','new-animal':'animals'}[section],h=el('h1');if(iconName){h.className='page-heading';h.append(sectionIcon(iconName),el('span',title));}else h.textContent=title;view.replaceChildren(h);if(description)view.append(text(description,'muted'));}
 function empty(message){return el('p',message,'empty');}
@@ -30,7 +38,7 @@ async function run(fn){
  if(busy){pendingNavigation=true;return;}busy=true;const fields=[...document.querySelectorAll('input,textarea,select:not(#community)')].map(n=>[n,n.disabled]);for(const [n]of fields)n.disabled=true;feedback.textContent='';$('modal-error').textContent='';document.querySelectorAll('button').forEach(b=>b.disabled=true);
  try{await fn();}catch(e){
   if(e.status===401 && account){reset();login();feedback.textContent='Tu sesión ha caducado. Vuelve a iniciar sesión.';}
-  else{feedback.textContent=e instanceof ApiError?e.message:'No se pudo conectar. Comprueba tu conexión e inténtalo de nuevo.';if($('modal').open)$('modal-error').textContent=feedback.textContent;}
+  else{feedback.textContent=errorText(e);if($('modal').open)$('modal-error').textContent=feedback.textContent;}
  }finally{busy=false;for(const [n,disabled]of fields)if(n.isConnected)n.disabled=disabled;document.querySelectorAll('button').forEach(b=>b.disabled=false);if(pendingNavigation){pendingNavigation=false;if(account && currentRoute()!==lastRoute)await run(render);}}
 }
 function reset(){account=null;communities=[];community=null;drafts.clear();view.replaceChildren();$('app').hidden=true;$('bell').hidden=true;$('message-notice').hidden=true;notificationAccount=null;notificationLatest=0;document.title='UrbaLink · Tu comunidad';$('modal').close();modalAction=null;}
@@ -205,9 +213,15 @@ async function catalogDetail(segment,id){
  if(!animal && owner){if(active && i.mode==='Rent')box.append(confirmAction(i.isLent?'Marcar disponible':'Marcar prestado','/availability',{isLent:!i.isLent}));else if((active&&i.mode==='Sale')||(i.state==='Ended'&&i.bidCount>0))box.append(confirmAction('Marcar completado','/complete',{}));}
  box.append(button('Denunciar anuncio',async()=>report(animal?'Animal':'Item',id),'ghost'),button('Actualizar anuncio',()=>catalogDetail(segment,id),'ghost'));
 }
+async function photoImage(file){
+ try{return await createImageBitmap(file,{resizeWidth:800,resizeQuality:'high'});}catch{}
+ const url=URL.createObjectURL(file),image=new Image();
+ try{await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('Image timeout')),15000);image.onload=()=>{clearTimeout(timer);resolve();};image.onerror=()=>{clearTimeout(timer);reject(new Error('Image decode'));};image.src=url;});return {width:image.naturalWidth,height:image.naturalHeight,source:image,close:()=>URL.revokeObjectURL(url)};}catch(error){URL.revokeObjectURL(url);throw error;}
+}
 async function jpegPhoto(file){
  if(!file)return null;if(!file.type.startsWith('image/'))throw new ApiError(400,'Selecciona una imagen.');
- const bitmap=await createImageBitmap(file);try{const canvas=document.createElement('canvas'),scale=Math.min(1,800/Math.max(bitmap.width,bitmap.height));canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);for(const quality of [.85,.65,.45,.25,.1]){const data=canvas.toDataURL('image/jpeg',quality).split(',')[1];if(atob(data).length<=40000)return data;}throw new ApiError(400,'La foto es demasiado detallada. Elige una imagen más pequeña.');}finally{bitmap.close();}
+ let bitmap;try{bitmap=await photoImage(file);}catch{throw new ApiError(400,'No se puede leer esta foto. Prueba con un archivo JPG o PNG, o publica sin foto.');}
+ try{const canvas=document.createElement('canvas'),scale=Math.min(1,800/Math.max(bitmap.width,bitmap.height));canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bitmap.source||bitmap,0,0,canvas.width,canvas.height);for(const quality of [.85,.65,.45,.25,.1]){const data=canvas.toDataURL('image/jpeg',quality).split(',')[1];if(atob(data).length<=40000)return data;}throw new ApiError(400,'La foto es demasiado detallada. Elige una imagen más pequeña o publica sin foto.');}catch(error){if(error instanceof ApiError)throw error;throw new ApiError(400,'No se pudo preparar esta foto en este dispositivo. Prueba con otra imagen o publica sin foto.');}finally{bitmap.close();}
 }
 function catalogForm(segment,existing=null){
  const animal=segment==='animals',key=segment+':'+community.id+':'+(existing?.id||'new'),saved=drafts.get(key)||{requestId:crypto.randomUUID(),...(existing||{})};drafts.set(key,saved);heading(existing?'Editar aviso':animal?'Publicar aviso de animal':'Publicar objeto');const box=card();box.classList.add('narrow');let title,description,mode,price,period,ends,step,kind,species,name,zone,occurred,withReporter,photo,retainedPhoto=existing?.photo||null;
@@ -260,9 +274,9 @@ async function communitySearch(query){
 }
 
 function photoField(f,initial=null,required=false,title='Foto (opcional)'){
- let retained=initial;const file=field(f,title,'file','',{accept:'image/*',required:required&&!initial}),preview=el('div');catalogPhoto(preview,retained,'Imagen de la publicación');
- file.onchange=()=>run(async()=>{retained=file.files.length?await jpegPhoto(file.files[0]):null;file.required=required&&!retained;preview.replaceChildren();catalogPhoto(preview,retained,'Imagen de la publicación');});
- f.append(preview,button('Quitar foto',async()=>{file.value='';retained=null;file.required=required;preview.replaceChildren();},'ghost'));
+ let retained=initial;const file=field(f,title,'file','',{accept:'image/*',required:required&&!initial}),preview=el('div'),progress=el('p',undefined,'muted');progress.setAttribute('role','status');catalogPhoto(preview,retained,'Imagen de la publicación');
+ file.onchange=()=>run(async()=>{f.clearError();progress.textContent='Preparando foto…';try{retained=file.files.length?await jpegPhoto(file.files[0]):null;file.required=required&&!retained;preview.replaceChildren();catalogPhoto(preview,retained,'Imagen de la publicación');}catch(error){f.showError(error);throw error;}finally{progress.textContent='';}});
+ f.append(progress,preview,button('Quitar foto',async()=>{file.value='';retained=null;file.required=required;preview.replaceChildren();f.clearError();},'ghost'));
  return {get:async()=>file.files.length?await jpegPhoto(file.files[0]):retained};
 }
 function bookAudience(value){return {Adult:'Adulto',Young:'Joven',Child:'Niño',Baby:'Bebé'}[value]||value;}
@@ -282,7 +296,7 @@ async function bookDetail(id){
  if(open&&(owner||community.role==='Admin'))n.append(change('Retirar libro','Withdrawn','Dejará de aparecer en la Biblioteca.'));n.append(button('Denunciar libro',async()=>report('Book',id),'ghost'),button('Actualizar libro',()=>bookDetail(id),'ghost'));
 }
 function bookForm(existing=null){
- const key='book:'+community.id+':'+(existing?.id||'new'),saved=drafts.get(key)||{requestId:crypto.randomUUID(),...(existing||{})};drafts.set(key,saved);heading(existing?'Editar libro':'Publicar libro','Añade una foto del libro y elige si lo prestas o lo pasas a otro vecino.');const box=card();box.classList.add('narrow');let title,author,isbn,condition,audience,mode,description,photo;
- const f=form(existing?'Guardar libro':'Publicar libro',async()=>{const data={requestId:saved.requestId,title:title.value,author:author.value,isbn:isbn.value,condition:condition.value,audience:audience.value,mode:mode.value,description:description.value,photo:await photo.get()};if(!data.photo)throw new ApiError(400,'Añade una foto del libro.');const result=await api(root()+'/books'+(existing?'/'+existing.id+'?version='+existing.version:''),existing?'PUT':'POST',data);drafts.delete(key);await go(`c/${community.id}/books/${existing?.id||result.id}`);});
- title=field(f,'Título del libro','text',saved.title||'',{required:true,maxLength:120});author=field(f,'Autor (opcional)','text',saved.author||'',{maxLength:120});isbn=field(f,'ISBN (opcional)','text',saved.isbn||'',{maxLength:32});condition=choice(f,'Estado del libro',[['New','Nuevo'],['LikeNew','Como nuevo'],['Good','Buen estado'],['Worn','Con uso']],saved.condition||'Good');audience=choice(f,'Público',[['Adult','Adulto'],['Young','Joven'],['Child','Niño'],['Baby','Bebé']],saved.audience||'Adult');mode=choice(f,'Cómo lo compartes',[['Lend','Lo presto'],['Pass','Lo paso']],saved.mode||'Lend');if(existing?.state==='Lent')mode.disabled=true;description=field(f,'Descripción (opcional)','textarea',saved.description||'',{maxLength:2000});photo=photoField(f,existing?.photo||null,true,'Foto del libro');f.addEventListener('input',()=>Object.assign(saved,{requestId:crypto.randomUUID(),title:title.value,author:author.value,isbn:isbn.value,condition:condition.value,audience:audience.value,mode:mode.value,description:description.value}));f.finish();box.append(f,link('Cancelar','library','button ghost'));view.append(box);
+ const key='book:'+community.id+':'+(existing?.id||'new'),saved=drafts.get(key)||{requestId:crypto.randomUUID(),...(existing||{})};drafts.set(key,saved);heading(existing?'Editar libro':'Publicar libro','Elige si lo prestas o lo pasas a otro vecino. La foto y el ISBN son opcionales.');const box=card();box.classList.add('narrow');let title,author,isbn,condition,audience,mode,description,photo;
+ const f=form(existing?'Guardar libro':'Publicar libro',async()=>{const data={requestId:saved.requestId,title:title.value,author:author.value,isbn:isbn.value,condition:condition.value,audience:audience.value,mode:mode.value,description:description.value,photo:await photo.get()};const result=await api(root()+'/books'+(existing?'/'+existing.id+'?version='+existing.version:''),existing?'PUT':'POST',data);drafts.delete(key);await go(`c/${community.id}/books/${existing?.id||result.id}`);},existing?'Guardando…':'Publicando…');
+ title=field(f,'Título del libro','text',saved.title||'',{required:true,maxLength:120});author=field(f,'Autor (opcional)','text',saved.author||'',{maxLength:120});isbn=field(f,'ISBN (opcional)','text',saved.isbn||'',{maxLength:32});condition=choice(f,'Estado del libro',[['New','Nuevo'],['LikeNew','Como nuevo'],['Good','Buen estado'],['Worn','Con uso']],saved.condition||'Good');audience=choice(f,'Público',[['Adult','Adulto'],['Young','Joven'],['Child','Niño'],['Baby','Bebé']],saved.audience||'Adult');mode=choice(f,'Cómo lo compartes',[['Lend','Lo presto'],['Pass','Lo paso']],saved.mode||'Lend');if(existing?.state==='Lent')mode.disabled=true;description=field(f,'Descripción (opcional)','textarea',saved.description||'',{maxLength:2000});photo=photoField(f,existing?.photo||null,false,'Foto del libro (opcional)');f.addEventListener('input',()=>Object.assign(saved,{requestId:crypto.randomUUID(),title:title.value,author:author.value,isbn:isbn.value,condition:condition.value,audience:audience.value,mode:mode.value,description:description.value}));f.finish();box.append(f,link('Cancelar','library','button ghost'));view.append(box);
 }

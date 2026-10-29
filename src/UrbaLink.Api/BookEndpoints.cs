@@ -13,7 +13,7 @@ public static class BookEndpoints
         FROM books b JOIN users u ON u.id=b.owner_id
         """;
     private static BookDto Read(NpgsqlDataReader r)=>new(r.GetInt64(0),r.GetGuid(1),r.GetGuid(2),r.GetString(3),r.GetString(4),r.GetString(5),
-        r.GetString(6),r.GetString(7),r.GetString(8),r.GetString(9),r.GetString(10),r.GetFieldValue<byte[]>(11),r.GetString(12),r.GetInt32(13));
+        r.GetString(6),r.GetString(7),r.GetString(8),r.GetString(9),r.GetString(10),r.IsDBNull(11)?null:r.GetFieldValue<byte[]>(11),r.GetString(12),r.GetInt32(13));
     private static async Task<BookDto?> Get(NpgsqlConnection c,Guid communityId,long id,CancellationToken ct)
     {
         await using var q=Database.Command(c,Select+" WHERE b.community_id=$1 AND b.id=$2",communityId,id);

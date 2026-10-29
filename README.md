@@ -631,7 +631,7 @@ No solicita permisos del dispositivo ni utiliza notificaciones push con la web c
 
 ## Biblioteca y fotos en publicaciones
 
-Biblioteca permite publicar un libro con título y foto obligatorios, autor e ISBN
+Biblioteca permite publicar un libro con título obligatorio y foto, autor e ISBN
 opcionales, estado físico (Nuevo, Como nuevo, Buen estado o Con uso), público
 (Adulto, Joven, Niño o Bebé), descripción opcional y modalidad **Lo presto / Lo paso**.
 El catálogo se filtra por público, modalidad y Mis libros.
@@ -654,7 +654,9 @@ sus fotos existentes. Las imágenes se convierten a JPEG de hasta 800 píxeles y
 40 KB, utilizando el mismo tratamiento que los anuncios actuales.
 
 La migración 017 añade la Biblioteca, sus conversaciones y la foto opcional de las
-publicaciones sin modificar el contenido anterior. Android sigue en pausa.
+publicaciones; la 018 permite libros sin foto conservando las imágenes existentes.
+El formulario muestra progreso al publicar y los errores junto al botón, sin perder
+los datos introducidos. Android sigue en pausa.
 
     pwsh -File scripts/Test-Posts.ps1 -Suite library
     node scripts/Test-WebCatalog.mjs

@@ -215,8 +215,9 @@ una sesión abierta o mediante la corrección auditada del operador de plataform
 No se necesitan variables nuevas; aplica la migración 016 antes del arranque.
 ## Biblioteca y fotos del tablón
 
-La versión que incorpora Biblioteca requiere aplicar la migración 017 en el
+La versión que incorpora Biblioteca requiere aplicar las migraciones 017 y 018 en el
 pre-deploy habitual antes de iniciar la API actualizada. No añade variables ni
 servicios externos. Conserva las publicaciones y conversaciones existentes.
 La foto se almacena en PostgreSQL, igual que las imágenes actuales de objetos
-y animales; no se requiere un servicio adicional de archivos.
+y animales; no se requiere un servicio adicional de archivos. La 018 hace la foto
+del libro opcional y conserva las imágenes ya publicadas.
