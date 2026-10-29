@@ -78,6 +78,7 @@ if (app.Services.GetService<NpgsqlDataSource>() is { } database)
     app.MapComments();
     app.MapCommunityManagement();
     app.MapMarket();
+    app.MapBooks();
     app.MapServiceChats();
     app.MapNotifications();
     app.MapRides();

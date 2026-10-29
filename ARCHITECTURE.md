@@ -199,3 +199,15 @@ es obligatorio en registro, acceso y actualización de perfil; las filas anterio
 sin correo se conservan hasta que su titular lo complete. El operador de plataforma
 solo puede asignar correo a cuentas que carecen de él, con auditoría y sin cambiar
 contraseñas. El nombre visible deja de ser un identificador de autenticación.
+## Biblioteca
+
+`BookEndpoints` gestiona fichas, cambios de disponibilidad y conversaciones
+privadas. Las mutaciones toman los bloqueos en orden comunidad → libro → conversación.
+La creación es idempotente por autor/comunidad/request_id y compara el hash del
+contenido normalizado. La edición comprueba versión para no sobrescribir cambios.
+Las conversaciones comparten almacenamiento, lecturas, bandeja y avisos existentes,
+con un único sujeto garantizado por `conversation_subject`.
+
+La foto opcional se añade a `PostDto` sin romper los clientes que no la envían.
+`PostRecord` centraliza su lectura; Trayectos especifica su posición en la proyección.
+El reintento de un trayecto compara el contenido de la imagen, no su referencia.

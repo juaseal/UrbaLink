@@ -25,7 +25,7 @@ public static class ServiceChatEndpoints
         if(await CommunityAccess.Role(c,communityId,uid,ct) is null)return Error("No tienes acceso a esta comunidad.",403);
         PostDto post;
         await using(var q=Database.Command(c,"""
-            SELECT p.id,p.community_id,p.author_id,u.name,p.title,p.body,p.category,p.created_at
+            SELECT p.id,p.community_id,p.author_id,u.name,p.title,p.body,p.category,p.created_at,p.photo
             FROM posts p JOIN users u ON u.id=p.author_id
             WHERE p.id=$1 AND p.community_id=$2 AND p.category='Ofrezco' AND p.deleted_at IS NULL FOR SHARE OF p
             """,postId,communityId))

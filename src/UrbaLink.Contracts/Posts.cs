@@ -9,7 +9,7 @@ public static class PostCategories
     public static readonly string[] All = ["General", "Ayuda", "Ofrezco", "Recomendación", "Material", "Coche", "Aviso oficial"];
 }
 
-public sealed record CreatePostRequest(string Title, string Body, string Category);
+public sealed record CreatePostRequest(string Title, string Body, string Category, byte[]? Photo = null);
 public sealed record PostDto(long Id, Guid CommunityId, Guid AuthorId, string AuthorName,
-    string Title, string Body, string Category, DateTimeOffset CreatedAt);
+    string Title, string Body, string Category, DateTimeOffset CreatedAt, byte[]? Photo = null);
 public sealed record PostPage(PostDto[] Items, long? NextBefore);

@@ -11,10 +11,10 @@ public static class RideEndpoints
     private const string Select="""
         SELECT p.id,p.community_id,p.author_id,u.name,p.title,p.body,p.category,p.created_at,
             r.origin,r.destination,r.days,r.departure_minutes,r.return_minutes,r.return_next_day,r.seats,r.price_cents,
-            r.allows_detour,r.detour_details,r.meeting_point,r.notes
+            r.allows_detour,r.detour_details,r.meeting_point,r.notes,p.photo
         FROM ride_details r JOIN posts p ON p.id=r.post_id JOIN users u ON u.id=p.author_id
         """;
-    private static RideDto Read(NpgsqlDataReader r)=>new(PostRecord.Read(r),
+    private static RideDto Read(NpgsqlDataReader r)=>new(PostRecord.Read(r,20),
         r.GetString(8),r.GetString(9),r.GetInt32(10),r.GetInt32(11),r.IsDBNull(12)?null:r.GetInt32(12),r.GetBoolean(13),r.GetInt32(14),r.GetInt32(15),r.GetBoolean(16),r.GetString(17),r.GetString(18),r.GetString(19));
     private static async Task<bool> Access(NpgsqlConnection c,Guid community,Guid user,CancellationToken ct) =>
         await CommunityAccess.Role(c,community,user,ct) is not null;
@@ -45,8 +45,8 @@ public static class RideEndpoints
         {
             if(await r.ReadAsync(ct))
             {
-                var old=Read(r);var original=new CreateRideRequest(request.RequestId,old.Origin,old.Destination,old.Days,old.DepartureMinutes,old.ReturnMinutes,old.ReturnNextDay,old.Seats,old.PriceCents,old.AllowsDetour,old.DetourDetails,old.MeetingPoint,old.Notes);
-                return original==request?Results.Ok(old):Error("Este envío ya existe con otros datos. Comprueba tus trayectos antes de publicar de nuevo.",409);
+                var old=Read(r);var original=new CreateRideRequest(request.RequestId,old.Origin,old.Destination,old.Days,old.DepartureMinutes,old.ReturnMinutes,old.ReturnNextDay,old.Seats,old.PriceCents,old.AllowsDetour,old.DetourDetails,old.MeetingPoint,old.Notes,old.Post.Photo);
+                return (original with{Photo=null})==(request with{Photo=null})&&(old.Post.Photo??[]).SequenceEqual(request.Photo??[])?Results.Ok(old):Error("Este envío ya existe con otros datos. Comprueba tus trayectos antes de publicar de nuevo.",409);
             }
         }
         var price=(request.PriceCents/100m).ToString("C",CultureInfo.GetCultureInfo("es-ES"));
@@ -57,7 +57,7 @@ public static class RideEndpoints
         if(request.Notes.Length>0)body+="\n"+request.Notes;
         var title=$"{request.Origin} → {request.Destination}";if(title.Length>120)title=title[..117]+"…";
         long id;
-        await using(var post=Database.Command(c,"INSERT INTO posts(community_id,author_id,title,body,category) VALUES($1,$2,$3,$4,'Coche') RETURNING id",communityId,uid,title,body))id=(long)(await post.ExecuteScalarAsync(ct))!;
+        await using(var post=Database.Command(c,"INSERT INTO posts(community_id,author_id,title,body,category,photo) VALUES($1,$2,$3,$4,'Coche',$5) RETURNING id",communityId,uid,title,body,request.Photo))id=(long)(await post.ExecuteScalarAsync(ct))!;
         await using(var insert=Database.Command(c,"""
             INSERT INTO ride_details(post_id,community_id,author_id,request_id,origin,destination,days,departure_minutes,return_minutes,return_next_day,seats,price_cents,allows_detour,detour_details,meeting_point,notes)
             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)

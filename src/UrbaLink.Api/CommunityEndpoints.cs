@@ -101,7 +101,7 @@ public static partial class CommunityEndpoints
         {
             await using var query = Database.Command(connection,
                 """
-                SELECT p.id,p.community_id,p.author_id,u.name,p.title,p.body,p.category,p.created_at
+                SELECT p.id,p.community_id,p.author_id,u.name,p.title,p.body,p.category,p.created_at,p.photo
                 FROM posts p JOIN users u ON u.id=p.author_id
                 WHERE p.community_id=$1 AND p.deleted_at IS NULL AND ($2=false OR p.category='Aviso oficial')
                 ORDER BY p.id DESC LIMIT 3

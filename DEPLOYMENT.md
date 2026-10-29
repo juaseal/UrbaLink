@@ -213,3 +213,10 @@ El acceso de vecinos y del panel utiliza exclusivamente email y contraseña de
 el perfil. Las cuentas existentes sin email se conservan: pueden añadirlo desde
 una sesión abierta o mediante la corrección auditada del operador de plataforma.
 No se necesitan variables nuevas; aplica la migración 016 antes del arranque.
+## Biblioteca y fotos del tablón
+
+La versión que incorpora Biblioteca requiere aplicar la migración 017 en el
+pre-deploy habitual antes de iniciar la API actualizada. No añade variables ni
+servicios externos. Conserva las publicaciones y conversaciones existentes.
+La foto se almacena en PostgreSQL, igual que las imágenes actuales de objetos
+y animales; no se requiere un servicio adicional de archivos.

@@ -24,7 +24,7 @@ public static class CommunitySearchEndpoints
         {
             var parts=before.Split('|');
             if(parts.Length!=3 || !DateTimeOffset.TryParseExact(parts[0],"O",CultureInfo.InvariantCulture,DateTimeStyles.None,out beforeAt) ||
-                parts[1] is not ("Post" or "Item" or "Animal") || !long.TryParse(parts[2],NumberStyles.None,CultureInfo.InvariantCulture,out beforeId) || beforeId<=0)
+                parts[1] is not ("Post" or "Item" or "Animal" or "Book") || !long.TryParse(parts[2],NumberStyles.None,CultureInfo.InvariantCulture,out beforeId) || beforeId<=0)
                 return Results.Json(new ApiError("Página de búsqueda no válida."),statusCode:400);
             beforeAt=beforeAt.ToUniversalTime();beforeKind=parts[1];
         }
@@ -47,6 +47,9 @@ public static class CommunitySearchEndpoints
                     CASE WHEN n.name='' THEN '' ELSE ' · '||n.name END,
                     n.description,n.author_id,n.created_at,'Animales'
                 FROM animal_notices n WHERE n.community_id=$1 AND n.status<>'Withdrawn'
+                UNION ALL
+                SELECT 'Book',b.id,b.title,b.description||' '||b.author||' '||b.isbn,b.owner_id,b.created_at,'Biblioteca'
+                FROM books b WHERE b.community_id=$1 AND b.state<>'Withdrawn'
             ) x JOIN users u ON u.id=x.author_id
             WHERE strpos(translate(lower(x.title||' '||x.description),'áéíóúü','aeiouu'),
                 translate(lower($2),'áéíóúü','aeiouu'))>0

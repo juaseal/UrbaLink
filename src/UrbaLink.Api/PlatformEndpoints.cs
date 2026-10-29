@@ -88,10 +88,11 @@ public static class PlatformEndpoints
         await Audit(c,uid,"ListPublicContent",id.ToString(),"",ct);
         return await Page(c,"""
             SELECT * FROM (
-            SELECT 'Post' kind,id,title,body,author_id,created_at,deleted_at IS NOT NULL removed,NULL::text photo FROM posts WHERE community_id=$1
+            SELECT 'Post' kind,id,title,body,author_id,created_at,deleted_at IS NOT NULL removed,encode(photo,'base64') photo FROM posts WHERE community_id=$1
             UNION ALL SELECT 'Comment',m.id,'Comentario en '||p.title,m.body,m.author_id,m.created_at,m.deleted_at IS NOT NULL,NULL::text FROM comments m JOIN posts p ON p.id=m.post_id WHERE p.community_id=$1 AND p.category<>'Ofrezco'
             UNION ALL SELECT 'Item',id,title,description,owner_id,created_at,state='Withdrawn',encode(photo,'base64') FROM market_items WHERE community_id=$1
             UNION ALL SELECT 'Animal',id,species||' · '||kind,description||' · '||location,author_id,created_at,status='Withdrawn',encode(photo,'base64') FROM animal_notices WHERE community_id=$1
+            UNION ALL SELECT 'Book',id,title,description,owner_id,created_at,state='Withdrawn',encode(photo,'base64') FROM books WHERE community_id=$1
             ) content ORDER BY created_at DESC,kind,id DESC
             """,offset,ct,id);
     });
@@ -151,6 +152,7 @@ public static class PlatformEndpoints
             "Post"=>"UPDATE posts SET deleted_at=COALESCE(deleted_at,now()),deleted_by=$3 WHERE community_id=$1 AND id=$2 RETURNING id",
             "Comment"=>"UPDATE comments m SET deleted_at=COALESCE(m.deleted_at,now()),deleted_by=$3 FROM posts p WHERE p.id=m.post_id AND p.community_id=$1 AND m.id=$2 RETURNING m.id",
             "Item"=>"UPDATE market_items SET state='Withdrawn' WHERE community_id=$1 AND id=$2 AND $3::uuid IS NOT NULL RETURNING id",
+            "Book"=>"UPDATE books SET state='Withdrawn',version=version+1 WHERE community_id=$1 AND id=$2 AND $3::uuid IS NOT NULL RETURNING id",
             "Animal"=>"UPDATE animal_notices SET status='Withdrawn',closed_at=COALESCE(closed_at,now()),updated_at=now(),version=version+1 WHERE community_id=$1 AND id=$2 AND $3::uuid IS NOT NULL RETURNING id",
             _=>null
         };

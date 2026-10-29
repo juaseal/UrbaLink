@@ -22,9 +22,10 @@ public static class ReportEndpoints
         var sql=input.Kind switch
         {
             "Community"=>"SELECT jsonb_build_object('name',name)::text FROM communities WHERE id=$1 AND $2::bigint=0 AND $3::uuid IS NOT NULL",
-            "Post"=>"SELECT jsonb_build_object('title',title,'body',body,'authorId',author_id)::text FROM posts WHERE community_id=$1 AND id=$2 AND deleted_at IS NULL AND $3::uuid IS NOT NULL",
+            "Post"=>"SELECT jsonb_build_object('title',title,'body',body,'authorId',author_id,'photo',encode(photo,'base64'))::text FROM posts WHERE community_id=$1 AND id=$2 AND deleted_at IS NULL AND $3::uuid IS NOT NULL",
             "Comment"=>"SELECT jsonb_build_object('title',p.title,'body',m.body,'authorId',m.author_id,'postId',p.id)::text FROM comments m JOIN posts p ON p.id=m.post_id WHERE p.community_id=$1 AND m.id=$2 AND m.deleted_at IS NULL AND p.deleted_at IS NULL AND p.category<>'Ofrezco' AND $3::uuid IS NOT NULL",
             "Item"=>"SELECT jsonb_build_object('title',title,'body',description,'authorId',owner_id,'photo',encode(photo,'base64'))::text FROM market_items WHERE community_id=$1 AND id=$2 AND state<>'Withdrawn' AND $3::uuid IS NOT NULL",
+            "Book"=>"SELECT jsonb_build_object('title',title,'body',description,'authorId',owner_id,'photo',encode(photo,'base64'))::text FROM books WHERE community_id=$1 AND id=$2 AND state<>'Withdrawn' AND $3::uuid IS NOT NULL",
             "Animal"=>"SELECT jsonb_build_object('title',species||' · '||kind,'body',description,'authorId',author_id,'photo',encode(photo,'base64'))::text FROM animal_notices WHERE community_id=$1 AND id=$2 AND status<>'Withdrawn' AND $3::uuid IS NOT NULL",
             "Message"=>"""
                 SELECT jsonb_build_object('body',m.body,'authorId',m.author_id,'sentAt',m.created_at,'conversationId',t.id)::text
@@ -32,8 +33,9 @@ public static class ReportEndpoints
                 LEFT JOIN market_items i ON i.id=t.item_id
                 LEFT JOIN posts p ON p.id=t.post_id AND p.category='Ofrezco' AND p.deleted_at IS NULL
                 LEFT JOIN animal_notices n ON n.id=t.animal_notice_id
-                WHERE COALESCE(i.community_id,p.community_id,n.community_id)=$1 AND m.id=$2
-                AND (COALESCE(i.owner_id,p.author_id,n.author_id)=$3 OR t.interested_user_id=$3)
+                LEFT JOIN books b ON b.id=t.book_id
+                WHERE COALESCE(i.community_id,p.community_id,n.community_id,b.community_id)=$1 AND m.id=$2
+                AND (COALESCE(i.owner_id,p.author_id,n.author_id,b.owner_id)=$3 OR t.interested_user_id=$3)
                 """,
             _=>null
         };

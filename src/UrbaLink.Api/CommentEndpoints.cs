@@ -26,7 +26,7 @@ public static class CommentEndpoints
         if (await CommunityAccess.Role(connection, communityId, userId, ct) is null) return null;
         await using var command = Database.Command(connection,
             """
-            SELECT p.id,p.community_id,p.author_id,u.name,p.title,p.body,p.category,p.created_at
+            SELECT p.id,p.community_id,p.author_id,u.name,p.title,p.body,p.category,p.created_at,p.photo
             FROM posts p JOIN users u ON u.id=p.author_id
             JOIN active_memberships m ON m.community_id=p.community_id AND m.user_id=$3
             WHERE p.community_id=$1 AND p.id=$2 AND p.deleted_at IS NULL AND p.category<>'Ofrezco'

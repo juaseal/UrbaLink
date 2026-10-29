@@ -16,21 +16,22 @@ public static class ConversationInboxEndpoints
         await using var connection = await source.OpenConnectionAsync(ct);
         await using var query = Database.Command(connection, """
             SELECT t.id,c.id,c.name,
-                CASE WHEN t.animal_notice_id IS NOT NULL THEN 'Animal' WHEN t.post_id IS NOT NULL THEN 'Service' ELSE 'Object' END,
-                COALESCE(i.id,p.id,n.id),COALESCE(i.title,p.title,n.species||' · '||n.kind),
-                CASE WHEN COALESCE(i.owner_id,p.author_id,n.author_id)=$1 THEN interested.name ELSE author.name END,
+                CASE WHEN t.book_id IS NOT NULL THEN 'Book' WHEN t.animal_notice_id IS NOT NULL THEN 'Animal' WHEN t.post_id IS NOT NULL THEN 'Service' ELSE 'Object' END,
+                COALESCE(i.id,p.id,n.id,b.id),COALESCE(i.title,p.title,b.title,n.species||' · '||n.kind),
+                CASE WHEN COALESCE(i.owner_id,p.author_id,n.author_id,b.owner_id)=$1 THEN interested.name ELSE author.name END,
                 (SELECT body FROM market_messages WHERE conversation_id=t.id ORDER BY id DESC LIMIT 1),
                 (SELECT count(*)::int FROM market_messages m WHERE m.conversation_id=t.id AND m.author_id<>$1 AND m.id>COALESCE(r.last_message_id,0))
             FROM market_conversations t
             LEFT JOIN market_items i ON i.id=t.item_id
             LEFT JOIN posts p ON p.id=t.post_id AND p.category='Ofrezco' AND p.deleted_at IS NULL
             LEFT JOIN animal_notices n ON n.id=t.animal_notice_id
-            JOIN communities c ON c.id=COALESCE(i.community_id,p.community_id,n.community_id)
+                LEFT JOIN books b ON b.id=t.book_id
+            JOIN communities c ON c.id=COALESCE(i.community_id,p.community_id,n.community_id,b.community_id)
             JOIN active_memberships member ON member.community_id=c.id AND member.user_id=$1
             JOIN users interested ON interested.id=t.interested_user_id
-            JOIN users author ON author.id=COALESCE(i.owner_id,p.author_id,n.author_id)
+            JOIN users author ON author.id=COALESCE(i.owner_id,p.author_id,n.author_id,b.owner_id)
             LEFT JOIN market_message_reads r ON r.conversation_id=t.id AND r.user_id=$1
-            WHERE t.id<$2 AND (COALESCE(i.owner_id,p.author_id,n.author_id)=$1 OR t.interested_user_id=$1)
+            WHERE t.id<$2 AND (COALESCE(i.owner_id,p.author_id,n.author_id,b.owner_id)=$1 OR t.interested_user_id=$1)
             ORDER BY t.id DESC LIMIT 21
             """, uid, before ?? long.MaxValue);
         var items = new List<ConversationSummary>();

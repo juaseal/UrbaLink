@@ -15,20 +15,21 @@ public static class NotificationEndpoints
 
     private const string Unread = """
             WITH unread AS (
-                SELECT t.id,COALESCE(i.id,p.id,n.id) AS subject_id,COALESCE(i.title,p.title,CASE WHEN n.species='Dog' THEN 'Perro' ELSE 'Gato' END || CASE WHEN n.kind='Lost' THEN ' perdido' ELSE ' encontrado' END) AS title,
-                    COALESCE(i.community_id,p.community_id,n.community_id) AS community_id,c.name AS community_name,a.role,
-                    CASE WHEN t.animal_notice_id IS NOT NULL THEN 'Animal' WHEN t.post_id IS NULL THEN 'Object' ELSE 'Service' END AS kind,
+                SELECT t.id,COALESCE(i.id,p.id,n.id,b.id) AS subject_id,COALESCE(i.title,p.title,b.title,CASE WHEN n.species='Dog' THEN 'Perro' ELSE 'Gato' END || CASE WHEN n.kind='Lost' THEN ' perdido' ELSE ' encontrado' END) AS title,
+                    COALESCE(i.community_id,p.community_id,n.community_id,b.community_id) AS community_id,c.name AS community_name,a.role,
+                    CASE WHEN t.book_id IS NOT NULL THEN 'Book' WHEN t.animal_notice_id IS NOT NULL THEN 'Animal' WHEN t.post_id IS NULL THEN 'Object' ELSE 'Service' END AS kind,
                     count(*)::int AS unread_count,max(m.id) AS latest
                 FROM market_conversations t
                 LEFT JOIN market_items i ON i.id=t.item_id
                 LEFT JOIN posts p ON p.id=t.post_id AND p.category='Ofrezco' AND p.deleted_at IS NULL
                 LEFT JOIN animal_notices n ON n.id=t.animal_notice_id
-                JOIN communities c ON c.id=COALESCE(i.community_id,p.community_id,n.community_id)
+                LEFT JOIN books b ON b.id=t.book_id
+                JOIN communities c ON c.id=COALESCE(i.community_id,p.community_id,n.community_id,b.community_id)
                 JOIN active_memberships a ON a.community_id=c.id AND a.user_id=$1
                 LEFT JOIN market_message_reads r ON r.conversation_id=t.id AND r.user_id=$1
                 JOIN market_messages m ON m.conversation_id=t.id AND m.author_id<>$1 AND m.id>COALESCE(r.last_message_id,0)
-                WHERE COALESCE(i.owner_id,p.author_id,n.author_id)=$1 OR t.interested_user_id=$1
-                GROUP BY t.id,i.id,p.id,n.id,c.name,a.role
+                WHERE COALESCE(i.owner_id,p.author_id,n.author_id,b.owner_id)=$1 OR t.interested_user_id=$1
+                GROUP BY t.id,i.id,p.id,n.id,b.id,c.name,a.role
             )
         """;
 

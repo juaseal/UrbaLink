@@ -29,7 +29,7 @@ public static class PostEndpoints
             return Error("No tienes acceso a esta comunidad.", 403);
         await using var command = Database.Command(connection,
             """
-            SELECT p.id,p.community_id,p.author_id,u.name,p.title,p.body,p.category,p.created_at
+            SELECT p.id,p.community_id,p.author_id,u.name,p.title,p.body,p.category,p.created_at,p.photo
             FROM posts p JOIN users u ON u.id=p.author_id
             WHERE p.community_id=$1 AND p.deleted_at IS NULL
                 AND ($2='' OR p.category=$2 OR ($2='Ayuda y servicios' AND p.category IN ('Ayuda','Ofrezco','Recomendación'))) AND p.id < $3
@@ -49,8 +49,8 @@ public static class PostEndpoints
         var title = request.Title?.Trim() ?? "";
         var body = request.Body?.Trim() ?? "";
         if (title.Length is < 3 or > 120 || body.Length is < 1 or > 4000 ||
-            !PostCategories.All.Contains(request.Category))
-            return Error("Escribe un título de 3–120 caracteres, un mensaje de 1–4000 y una categoría válida.", 400);
+            !PostCategories.All.Contains(request.Category) || (request.Photo is not null && !MarketPhotoRules.IsValid(request.Photo)))
+            return Error("Escribe un título de 3–120 caracteres, un mensaje de 1–4000, una categoría válida y, opcionalmente, una foto JPEG de hasta 40 KB.", 400);
         var userId = Tokens.UserId(principal);
         await using var connection = await source.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
@@ -60,14 +60,14 @@ public static class PostEndpoints
         await using var command = Database.Command(connection,
             """
             WITH created AS (
-                INSERT INTO posts(community_id,author_id,title,body,category)
-                SELECT community_id,user_id,$3,$4,$5 FROM active_memberships
+                INSERT INTO posts(community_id,author_id,title,body,category,photo)
+                SELECT community_id,user_id,$3,$4,$5,$6 FROM active_memberships
                 WHERE community_id=$1 AND user_id=$2 AND ($5 <> 'Aviso oficial' OR role='Admin')
                 RETURNING *
             )
-            SELECT p.id,p.community_id,p.author_id,u.name,p.title,p.body,p.category,p.created_at
+            SELECT p.id,p.community_id,p.author_id,u.name,p.title,p.body,p.category,p.created_at,p.photo
             FROM created p JOIN users u ON u.id=p.author_id
-            """, communityId, userId, title, body, request.Category);
+            """, communityId, userId, title, body, request.Category, request.Photo);
         PostDto? post;
         await using (var reader = await command.ExecuteReaderAsync(ct))
             post = await reader.ReadAsync(ct) ? PostRecord.Read(reader) : null;

@@ -628,3 +628,33 @@ mensaje al cerrar la tarjeta; vuelve a aparecer cuando llega otro mensaje.
 Se actualiza aproximadamente cada diez segundos, también en una pestaña abierta
 en segundo plano (sujeto a la frecuencia que permita el navegador).
 No solicita permisos del dispositivo ni utiliza notificaciones push con la web cerrada.
+
+## Biblioteca y fotos en publicaciones
+
+Biblioteca permite publicar un libro con título y foto obligatorios, autor e ISBN
+opcionales, estado físico (Nuevo, Como nuevo, Buen estado o Con uso), público
+(Adulto, Joven, Niño o Bebé), descripción opcional y modalidad **Lo presto / Lo paso**.
+El catálogo se filtra por público, modalidad y Mis libros.
+
+El propietario puede editar la ficha, marcar el libro como prestado o devuelto,
+marcarlo como pasado y retirarlo. Pasarlo lo retira del catálogo disponible; las
+conversaciones se conservan. Quien lo recibe puede publicarlo de nuevo si quiere
+continuar la cadena. La entrega y la devolución se acuerdan en privado, sin reservas
+automáticas ni fechas de devolución impuestas por la aplicación.
+
+El contacto usa la misma bandeja y avisos de mensajes que los demás módulos.
+Biblioteca participa en la búsqueda y en las denuncias y moderación de plataforma.
+Solo los participantes pueden leer las conversaciones. El administrador local
+puede retirar un libro, pero no leer sus mensajes privados.
+
+Todas las categorías del tablón admiten una foto opcional, incluidos General,
+Servicios, recomendaciones y avisos oficiales. Trayectos incorpora una foto opcional
+del coche. Se muestra en Inicio, listados y detalles. Compraventa y Animales conservan
+sus fotos existentes. Las imágenes se convierten a JPEG de hasta 800 píxeles y
+40 KB, utilizando el mismo tratamiento que los anuncios actuales.
+
+La migración 017 añade la Biblioteca, sus conversaciones y la foto opcional de las
+publicaciones sin modificar el contenido anterior. Android sigue en pausa.
+
+    pwsh -File scripts/Test-Posts.ps1 -Suite library
+    node scripts/Test-WebCatalog.mjs
