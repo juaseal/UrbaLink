@@ -1,14 +1,16 @@
 # Arquitectura y revisión técnica
 
-Revisión: 12 de octubre de 2026. La aplicación sigue siendo un monolito modular:
-una API, PostgreSQL y un cliente MAUI. Esta distribución permite mantener las
+Revisión original: 12 de octubre de 2026. Actualización web: 29 de octubre de 2026.
+La aplicación sigue siendo un monolito modular: una API, PostgreSQL y una web
+principal de vecinos, con el cliente MAUI en pausa. Esta distribución permite mantener las
 operaciones de comunidad, permisos y mensajes dentro de transacciones locales.
 
 ## Responsabilidades
 
 ```mermaid
 flowchart LR
-    Mobile[MAUI: pantallas] --> Client[ApiClient: transporte compartido]
+    Web[Web de vecinos y administración] --> Entry[Admisión, autenticación y límites]
+    Mobile[MAUI en pausa] --> Client[ApiClient: transporte compartido]
     Client --> Entry[Admisión, autenticación y límites]
     Entry --> Accounts[Cuentas y sesiones]
     Entry --> Communities[Comunidades e invitaciones]
@@ -16,13 +18,19 @@ flowchart LR
     Entry --> Market[Objetos y subastas]
     Entry --> Services[Servicios]
     Entry --> Rides[Trayectos]
+    Entry --> Animals[Animales]
+    Entry --> Books[Biblioteca]
     Entry --> Notifications[Notificaciones]
     Market --> Messages[ConversationMessages]
     Services --> Messages
+    Animals --> Messages
+    Books --> Messages
     Communities --> Access[CommunityAccess]
     Posts --> Access
     Market --> Access
     Services --> Access
+    Animals --> Access
+    Books --> Access
     Rides --> Access
     Messages --> DB[(PostgreSQL)]
     Access --> DB
@@ -36,7 +44,8 @@ flowchart LR
 - `MarketEndpoints`: reglas propias de venta, alquiler y subasta.
 - `ServiceChatEndpoints`: autorización del servicio y de sus participantes.
 - `ConversationMessages`: historial paginado, envíos idempotentes y lecturas.
-  Es el mismo código para servicios y objetos.
+  Es el mismo código para servicios, objetos, animales y libros.
+- `ConversationInboxEndpoints`: listado de conversaciones privadas del participante.
 - `NotificationEndpoints`: bandeja y contador, independientes del mercado.
 - `Data`: acceso parametrizado a SQL, acceso a comunidades, proyección de
   publicaciones, almacenamiento de mensajes y migraciones.
@@ -130,7 +139,8 @@ Las publicaciones simples todavía requieren comprobar el listado antes de repet
 ## Verificación reproducible
 
 `scripts/Test-Posts.ps1 -Suite` acepta `accounts`, `posts`, `comments`, `lifecycle`,
-`market`, `rides`, `services` y `architecture`. Crea bases temporales, comprueba
+`market`, `rides`, `services`, `animals`, `platform`, `web`, `email-auth`, `search`,
+`library` y `architecture`. Crea bases temporales, comprueba
 persistencia tras reiniciar y no usa los datos de la comunidad real.
 
 La suite de arquitectura fuerza bloqueos reales en PostgreSQL y comprueba:
@@ -146,7 +156,8 @@ y arranca después la API con las migraciones automáticas desactivadas.
 Android valida los contratos y el cliente. Estas pruebas no sustituyen una
 medición de carga sostenida ni permiten afirmar una cifra de usuarios soportados.
 
-En esta revisión se ejecutaron las ocho suites y las comprobaciones de base sin
+En la revisión original del 12 de octubre se ejecutaron las ocho suites entonces
+disponibles y las comprobaciones de base sin
 configurar/inaccesible. Se compiló el cliente Android y se restauró la copia local
 autorizada en una base temporal, eliminada al terminar la comprobación. La base
 local quedó en la versión 11 con la API lista. No había un emulador conectado al
@@ -211,3 +222,22 @@ con un único sujeto garantizado por `conversation_subject`.
 La foto opcional se añade a `PostDto` sin romper los clientes que no la envían.
 `PostRecord` centraliza su lectura; Trayectos especifica su posición en la proyección.
 El reintento de un trayecto compara el contenido de la imagen, no su referencia.
+
+## Revisión web del 29 de octubre
+
+Los mensajes privados usan filas explícitas: los propios se colocan a la derecha
+y se identifican como «Tú»; los recibidos se colocan a la izquierda. El historial
+conserva su orden al cargar páginas anteriores. Esta vista se comparte entre los
+cuatro tipos de conversación.
+
+`photoField` centraliza selección, conversión, previsualización, retirada y errores
+en Biblioteca, Compraventa, Animales, Tablón y Trayectos. Cada selección se convierte
+una vez y el envío reutiliza el resultado. Cambiar o quitar la imagen renueva el
+identificador idempotente de los formularios que lo usan; un reintento sin cambios
+conserva el identificador. Las imágenes usan carga diferida y decodificación asíncrona.
+El sondeo del contador no consulta cuando el documento está oculto y se reanuda
+al recuperar la visibilidad. Las respuestas que llegan después de ocultarlo no
+generan un aviso.
+
+Los hallazgos pendientes, su prioridad y los límites de esta revisión están en
+[REVIEW-2026-10-29.md](REVIEW-2026-10-29.md).
