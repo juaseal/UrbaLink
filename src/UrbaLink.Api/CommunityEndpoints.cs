@@ -73,7 +73,7 @@ public static partial class CommunityEndpoints
         return Results.NoContent();
     }
 
-    private static async Task<IResult> Overview(Guid id, ClaimsPrincipal user, NpgsqlDataSource source, CancellationToken ct)
+    private static async Task<IResult> Overview(Guid id, bool? summary, ClaimsPrincipal user, NpgsqlDataSource source, CancellationToken ct)
     {
         await using var connection = await source.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
@@ -104,7 +104,7 @@ public static partial class CommunityEndpoints
                 SELECT p.id,p.community_id,p.author_id,u.name,p.title,p.body,p.category,p.created_at,p.photo
                 FROM posts p JOIN users u ON u.id=p.author_id
                 WHERE p.community_id=$1 AND p.deleted_at IS NULL AND ($2=false OR p.category='Aviso oficial')
-                ORDER BY p.id DESC LIMIT 3
+                ORDER BY p.id DESC LIMIT (CASE WHEN $2 THEN 1 ELSE 3 END)
                 """, id, official);
             var list = new List<PostDto>();
             await using var reader = await query.ExecuteReaderAsync(ct);
@@ -113,6 +113,6 @@ public static partial class CommunityEndpoints
             return list.ToArray();
         }
         return Results.Ok(new CommunityOverview(community,members,total,material,routes,
-            (await Posts(true)).FirstOrDefault(),await Posts(false)));
+            summary==true?null:(await Posts(true)).FirstOrDefault(),summary==true?[]:await Posts(false)));
     }
 }

@@ -93,6 +93,7 @@ public static class PlatformEndpoints
             UNION ALL SELECT 'Item',id,title,description,owner_id,created_at,state='Withdrawn',encode(photo,'base64') FROM market_items WHERE community_id=$1
             UNION ALL SELECT 'Animal',id,species||' · '||kind,description||' · '||location,author_id,created_at,status='Withdrawn',encode(photo,'base64') FROM animal_notices WHERE community_id=$1
             UNION ALL SELECT 'Book',id,title,description,owner_id,created_at,state='Withdrawn',encode(photo,'base64') FROM books WHERE community_id=$1
+            UNION ALL SELECT 'Donation',id,title,description,owner_id,created_at,state='Withdrawn',encode(photo,'base64') FROM clothing_donations WHERE community_id=$1
             ) content ORDER BY created_at DESC,kind,id DESC
             """,offset,ct,id);
     });
@@ -153,6 +154,7 @@ public static class PlatformEndpoints
             "Comment"=>"UPDATE comments m SET deleted_at=COALESCE(m.deleted_at,now()),deleted_by=$3 FROM posts p WHERE p.id=m.post_id AND p.community_id=$1 AND m.id=$2 RETURNING m.id",
             "Item"=>"UPDATE market_items SET state='Withdrawn' WHERE community_id=$1 AND id=$2 AND $3::uuid IS NOT NULL RETURNING id",
             "Book"=>"UPDATE books SET state='Withdrawn',version=version+1 WHERE community_id=$1 AND id=$2 AND $3::uuid IS NOT NULL RETURNING id",
+            "Donation"=>"UPDATE clothing_donations SET state='Withdrawn',version=version+1 WHERE community_id=$1 AND id=$2 AND $3::uuid IS NOT NULL RETURNING id",
             "Animal"=>"UPDATE animal_notices SET status='Withdrawn',closed_at=COALESCE(closed_at,now()),updated_at=now(),version=version+1 WHERE community_id=$1 AND id=$2 AND $3::uuid IS NOT NULL RETURNING id",
             _=>null
         };

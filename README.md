@@ -599,7 +599,7 @@ el vecino desde la lista de miembros. Solo permite completar cuentas sin correo,
 no sobrescribir direcciones existentes; la corrección queda auditada.
 
 La web reúne las funciones vecinales existentes de Android: inicio y avisos,
-tablón con todos sus filtros, comentarios, servicios y contacto privado,
+tablón, comentarios, servicios y contacto privado,
 compraventa/alquiler/subastas, animales, trayectos completos, mensajes y contador
 de no leídos, denuncias, perfil, comunidades, invitaciones, papelera y restauración.
 No se añaden pantallas nuevas a Android durante esta fase.
@@ -607,9 +607,9 @@ No se añaden pantallas nuevas a Android durante esta fase.
 Pruebas del acceso: `pwsh -File scripts/Test-Posts.ps1 -Suite email-auth`.
 ## Buscar en la comunidad
 
-El buscador visible bajo el menú encuentra texto en títulos y descripciones de
+El buscador de Inicio encuentra texto en títulos y descripciones de
 publicaciones del tablón, servicios, recomendaciones, trayectos, compraventa y
-avisos de animales de la comunidad seleccionada. No distingue mayúsculas ni tildes
+avisos de animales, libros y donaciones de ropa de la comunidad seleccionada. No distingue mayúsculas ni tildes
 y busca el texto escrito literalmente (hasta 120 caracteres). Los resultados
 abren el detalle de su módulo y se cargan en páginas de 20, de más nuevos a antiguos.
 
@@ -625,8 +625,8 @@ El contador de mensajes muestra un aviso dentro de la página al detectar nuevos
 mensajes pendientes, con acceso a la bandeja y opción de cerrarlo. El título de
 la pestaña refleja el número de no leídos. El aviso no se repite por el mismo
 mensaje al cerrar la tarjeta; vuelve a aparecer cuando llega otro mensaje.
-Se actualiza aproximadamente cada diez segundos, también en una pestaña abierta
-en segundo plano (sujeto a la frecuencia que permita el navegador).
+Se actualiza aproximadamente cada diez segundos mientras la pestaña está visible.
+Al volver a mostrarla, consulta de nuevo el contador.
 No solicita permisos del dispositivo ni utiliza notificaciones push con la web cerrada.
 
 ## Biblioteca y fotos en publicaciones
@@ -649,7 +649,7 @@ puede retirar un libro, pero no leer sus mensajes privados.
 
 Todas las categorías del tablón admiten una foto opcional, incluidos General,
 Servicios, recomendaciones y avisos oficiales. Trayectos incorpora una foto opcional
-del coche. Se muestra en Inicio, listados y detalles. Compraventa y Animales conservan
+del coche. Se muestra en listados y detalles. Compraventa y Animales conservan
 sus fotos existentes. Las imágenes se convierten a JPEG de hasta 800 píxeles y
 40 KB, utilizando el mismo tratamiento que los anuncios actuales.
 
@@ -660,3 +660,45 @@ los datos introducidos. Android sigue en pausa.
 
     pwsh -File scripts/Test-Posts.ps1 -Suite library
     node scripts/Test-WebCatalog.mjs
+
+## Ropa para donar — Pasa al siguiente
+
+La web incluye un módulo independiente **Ropa** para donar prendas o lotes de todas
+las edades: bebé, infantil, juvenil y adulto. Cada anuncio indica título, talla o
+tallas, número de prendas, temporada y estado. La descripción y la foto son opcionales.
+Todas las ofertas de este módulo son gratuitas; Compraventa conserva sus modalidades.
+
+El catálogo se filtra por público, talla y temporada. **Mis donaciones** conserva
+los anuncios entregados y retirados. Quien publica puede editar, reservar, volver
+a marcar disponible, entregar o retirar su anuncio. La reserva es manual y no
+asigna automáticamente un destinatario ni divide el lote.
+
+Los vecinos acuerdan la recogida por conversación privada. Los chats aparecen en
+Mensajes y utilizan los mismos avisos con la web visible. Los administradores de
+comunidad pueden retirar anuncios, pero no leer conversaciones ajenas. Se pueden
+denunciar anuncios y mensajes concretos al equipo de plataforma.
+
+La búsqueda de toda la comunidad incluye las donaciones y sus tallas. El nuevo
+icono y la tarjeta de Inicio se publican con la web. Android continúa
+en pausa.
+
+La migración 019 añade el catálogo, su vínculo exclusivo a conversaciones y la vista
+compartida `conversation_subjects`, usada por bandeja, avisos y denuncias de mensajes.
+Conserva los libros, mensajes y objetos existentes.
+
+    pwsh -File scripts/Test-Posts.ps1 -Suite donations
+    node scripts/Test-WebCatalog.mjs
+
+## Navegación web simplificada
+
+El menú fijo contiene **Inicio**, **Mensajes** y **Mi cuenta**. Inicio muestra una
+única tarjeta por módulo: Tablón, Compraventa, Ropa, Biblioteca, Trayectos y Animales.
+No duplica publicaciones ni botones de creación: cada módulo tiene su formulario.
+El buscador común está en Inicio; el contador de no leídos está en Mensajes.
+
+Tablón reúne consultas, ayuda, servicios, recomendaciones y avisos, sin pestañas
+de categorías. Excluye los antiguos posts Material y Coche de su listado web.
+Los enlaces antiguos de esas categorías llevan a Compraventa y Trayectos.
+Los detalles de trayectos vuelven a Trayectos y utilizan su propia dirección.
+
+El [mapa de la web](WEB-MAP.md) describe las entradas, funciones y enlaces de vuelta.

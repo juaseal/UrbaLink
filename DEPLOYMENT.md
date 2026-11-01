@@ -221,3 +221,14 @@ servicios externos. Conserva las publicaciones y conversaciones existentes.
 La foto se almacena en PostgreSQL, igual que las imágenes actuales de objetos
 y animales; no se requiere un servicio adicional de archivos. La 018 hace la foto
 del libro opcional y conserva las imágenes ya publicadas.
+
+## Ropa para donar
+
+El módulo Ropa requiere la migración 019 antes del arranque de la nueva API. El
+pre-deploy de migraciones existente la aplica. No requiere servicios externos ni
+variables adicionales. La foto sigue siendo opcional y se almacena en PostgreSQL.
+
+La migración conserva los datos anteriores y crea la vista `conversation_subjects`
+para integrar los cinco tipos de chat en bandeja, avisos y denuncias. Tras desplegar,
+comprobar `/health/ready`, la tarjeta Ropa en Inicio, publicación con y sin foto
+y contacto privado entre dos cuentas de la misma comunidad.

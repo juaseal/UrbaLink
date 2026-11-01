@@ -26,16 +26,13 @@ public static class ReportEndpoints
             "Comment"=>"SELECT jsonb_build_object('title',p.title,'body',m.body,'authorId',m.author_id,'postId',p.id)::text FROM comments m JOIN posts p ON p.id=m.post_id WHERE p.community_id=$1 AND m.id=$2 AND m.deleted_at IS NULL AND p.deleted_at IS NULL AND p.category<>'Ofrezco' AND $3::uuid IS NOT NULL",
             "Item"=>"SELECT jsonb_build_object('title',title,'body',description,'authorId',owner_id,'photo',encode(photo,'base64'))::text FROM market_items WHERE community_id=$1 AND id=$2 AND state<>'Withdrawn' AND $3::uuid IS NOT NULL",
             "Book"=>"SELECT jsonb_build_object('title',title,'body',description,'authorId',owner_id,'photo',encode(photo,'base64'))::text FROM books WHERE community_id=$1 AND id=$2 AND state<>'Withdrawn' AND $3::uuid IS NOT NULL",
+            "Donation"=>"SELECT jsonb_build_object('title',title,'body',description,'size',size,'quantity',quantity,'authorId',owner_id,'photo',encode(photo,'base64'))::text FROM clothing_donations WHERE community_id=$1 AND id=$2 AND state<>'Withdrawn' AND $3::uuid IS NOT NULL",
             "Animal"=>"SELECT jsonb_build_object('title',species||' · '||kind,'body',description,'authorId',author_id,'photo',encode(photo,'base64'))::text FROM animal_notices WHERE community_id=$1 AND id=$2 AND status<>'Withdrawn' AND $3::uuid IS NOT NULL",
             "Message"=>"""
                 SELECT jsonb_build_object('body',m.body,'authorId',m.author_id,'sentAt',m.created_at,'conversationId',t.id)::text
-                FROM market_messages m JOIN market_conversations t ON t.id=m.conversation_id
-                LEFT JOIN market_items i ON i.id=t.item_id
-                LEFT JOIN posts p ON p.id=t.post_id AND p.category='Ofrezco' AND p.deleted_at IS NULL
-                LEFT JOIN animal_notices n ON n.id=t.animal_notice_id
-                LEFT JOIN books b ON b.id=t.book_id
-                WHERE COALESCE(i.community_id,p.community_id,n.community_id,b.community_id)=$1 AND m.id=$2
-                AND (COALESCE(i.owner_id,p.author_id,n.author_id,b.owner_id)=$3 OR t.interested_user_id=$3)
+                FROM market_messages m JOIN conversation_subjects t ON t.id=m.conversation_id
+                WHERE t.community_id=$1 AND m.id=$2
+                AND (t.owner_id=$3 OR t.interested_user_id=$3)
                 """,
             _=>null
         };

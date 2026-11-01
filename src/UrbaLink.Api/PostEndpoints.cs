@@ -18,7 +18,7 @@ public static class PostEndpoints
         routes.MapDelete("/{postId:long}", Delete);
     }
 
-    private static async Task<IResult> List(Guid communityId, string? category, long? before,
+    private static async Task<IResult> List(Guid communityId, string? category, long? before, bool? boardOnly,
         ClaimsPrincipal principal, NpgsqlDataSource source, CancellationToken ct)
     {
         if ((category is not null && !PostCategories.All.Contains(category) && category != PostCategories.HelpGroup) || before is <= 0)
@@ -33,8 +33,9 @@ public static class PostEndpoints
             FROM posts p JOIN users u ON u.id=p.author_id
             WHERE p.community_id=$1 AND p.deleted_at IS NULL
                 AND ($2='' OR p.category=$2 OR ($2='Ayuda y servicios' AND p.category IN ('Ayuda','Ofrezco','Recomendación'))) AND p.id < $3
+                AND (NOT $4 OR p.category NOT IN ('Coche','Material'))
             ORDER BY p.id DESC LIMIT 21
-            """, communityId, category ?? "", before ?? long.MaxValue);
+            """, communityId, category ?? "", before ?? long.MaxValue, boardOnly??false);
         var posts = new List<PostDto>();
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct)) posts.Add(PostRecord.Read(reader));

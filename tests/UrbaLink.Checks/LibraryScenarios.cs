@@ -104,6 +104,14 @@ internal static class LibraryScenarios
             if(category=="Ofrezco")Check((await member.GetFromJsonAsync<ServiceDetail>(root+$"/services/{post.Id}"))!.Service.Photo?.SequenceEqual(photo)==true,"Servicio sin foto.");
             else Check((await member.GetFromJsonAsync<CommentPage>(root+$"/posts/{post.Id}/comments"))!.Post.Photo?.SequenceEqual(photo)==true,"Detalle de publicación sin foto.");
         }
+        var board=(await member.GetFromJsonAsync<PostPage>(root+"/posts?boardOnly=true"))!;
+        Check(board.Items.Length==PostCategories.All.Length-2&&board.Items.All(p=>p.Category is not ("Coche" or "Material")),"El Tablón mezcla módulos con tipos de publicación.");
+        Check(board.Items.All(p=>p.Photo?.SequenceEqual(photo)==true),"El Tablón simplificado pierde las fotos.");
+        Check((await member.GetFromJsonAsync<PostPage>(root+"/posts"))!.Items.Length==PostCategories.All.Length,"El listado anterior deja de ser compatible.");
+        var overview=(await member.GetFromJsonAsync<CommunityOverview>(root+"/overview"))!;
+        var summary=(await member.GetFromJsonAsync<CommunityOverview>(root+"/overview?summary=true"))!;
+        Check(overview.Notice?.Photo?.SequenceEqual(photo)==true&&overview.Recent.Length==3,"El resumen anterior pierde contenido.");
+        Check(summary.Notice is null&&summary.Recent.Length==0&&summary.MemberCount==overview.MemberCount&&summary.ActivePosts==overview.ActivePosts&&summary.Routes==overview.Routes,"Inicio carga publicaciones innecesarias o pierde sus contadores.");
         await Expect(await owner.PostAsJsonAsync(root+"/posts",new CreatePostRequest("Foto inválida","Texto","General",[1,2,3,4])),HttpStatusCode.BadRequest);
         await Expect(await owner.PostAsJsonAsync(root+"/posts",new CreatePostRequest("Sin permiso","Texto","Aviso oficial",photo)),HttpStatusCode.Forbidden);
         var rideInput=new CreateRideRequest(Guid.NewGuid(),"Carambolo","Centro",1,480,null,false,2,0,false,"","","",photo);

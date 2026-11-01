@@ -1,6 +1,6 @@
 # Arquitectura y revisión técnica
 
-Revisión original: 12 de octubre de 2026. Actualización web: 29 de octubre de 2026.
+Revisión original: 12 de octubre de 2026. Actualización web: 1 de noviembre de 2026.
 La aplicación sigue siendo un monolito modular: una API, PostgreSQL y una web
 principal de vecinos, con el cliente MAUI en pausa. Esta distribución permite mantener las
 operaciones de comunidad, permisos y mensajes dentro de transacciones locales.
@@ -20,17 +20,20 @@ flowchart LR
     Entry --> Rides[Trayectos]
     Entry --> Animals[Animales]
     Entry --> Books[Biblioteca]
+    Entry --> Donations[Ropa para donar]
     Entry --> Notifications[Notificaciones]
     Market --> Messages[ConversationMessages]
     Services --> Messages
     Animals --> Messages
     Books --> Messages
+    Donations --> Messages
     Communities --> Access[CommunityAccess]
     Posts --> Access
     Market --> Access
     Services --> Access
     Animals --> Access
     Books --> Access
+    Donations --> Access
     Rides --> Access
     Messages --> DB[(PostgreSQL)]
     Access --> DB
@@ -44,7 +47,7 @@ flowchart LR
 - `MarketEndpoints`: reglas propias de venta, alquiler y subasta.
 - `ServiceChatEndpoints`: autorización del servicio y de sus participantes.
 - `ConversationMessages`: historial paginado, envíos idempotentes y lecturas.
-  Es el mismo código para servicios, objetos, animales y libros.
+  Es el mismo código para servicios, objetos, animales, libros y donaciones.
 - `ConversationInboxEndpoints`: listado de conversaciones privadas del participante.
 - `NotificationEndpoints`: bandeja y contador, independientes del mercado.
 - `Data`: acceso parametrizado a SQL, acceso a comunidades, proyección de
@@ -140,7 +143,7 @@ Las publicaciones simples todavía requieren comprobar el listado antes de repet
 
 `scripts/Test-Posts.ps1 -Suite` acepta `accounts`, `posts`, `comments`, `lifecycle`,
 `market`, `rides`, `services`, `animals`, `platform`, `web`, `email-auth`, `search`,
-`library` y `architecture`. Crea bases temporales, comprueba
+`library`, `donations` y `architecture`. Crea bases temporales, comprueba
 persistencia tras reiniciar y no usa los datos de la comunidad real.
 
 La suite de arquitectura fuerza bloqueos reales en PostgreSQL y comprueba:
@@ -241,3 +244,45 @@ generan un aviso.
 
 Los hallazgos pendientes, su prioridad y los límites de esta revisión están en
 [REVIEW-2026-10-29.md](REVIEW-2026-10-29.md).
+
+## Ropa y proyección común de conversaciones — 1 de noviembre
+
+`DonationEndpoints` mantiene los anuncios de ropa gratuitos, tallas, cantidades,
+temporadas, público y disponibilidad. Reutiliza imágenes, sesiones y el almacén
+común de mensajes. Las reservas y entregas son manuales. Las mutaciones toman
+bloqueos en orden comunidad → donación → conversación, con versión de edición y
+creación idempotente mediante hash del contenido normalizado.
+
+La migración 019 añade `clothing_donations`, su clave foránea a conversaciones y
+la vista `conversation_subjects`. La vista proyecta identificador, contenido,
+comunidad, propietario, interesado y tipo en un único lugar. Bandeja, avisos y
+denuncias de mensajes la reutilizan; cada consulta sigue comprobando la pertenencia
+y la participación del usuario. La vista por sí sola no concede autorización.
+
+El invariante `conversation_subject` exige exactamente un sujeto entre objeto,
+servicio, animal, libro y donación. Los administradores locales pueden retirar un
+anuncio, sin obtener acceso a sus chats privados. Los estados Entregado y Retirado
+cierran nuevas solicitudes, pero conservan las conversaciones de sus participantes.
+
+Las pruebas de donaciones comprueban publicación sin foto, imagen posterior,
+filtros, paginación, ediciones concurrentes mediante versión, reintentos, aislamiento
+entre comunidades, reservas, entrega, historial, moderación, mensajes y avisos.
+Las suites anteriores verifican también la nueva proyección para los otros módulos.
+
+## Navegación web simplificada — 1 de noviembre
+
+El [mapa de la web](WEB-MAP.md) fija tres entradas persistentes: Inicio, Mensajes y
+Mi cuenta. Inicio contiene una tarjeta por módulo y el buscador global. No carga
+un segundo feed ni ofrece accesos de creación que dupliquen los de cada listado.
+
+`GET /overview?summary=true` conserva los contadores y omite aviso y publicaciones
+con sus imágenes; el contrato anterior sigue disponible sin ese parámetro.
+`GET /posts?boardOnly=true` excluye Coche y Material antes de paginar; las consultas
+anteriores conservan su comportamiento para clientes existentes. No borra datos.
+Los antiguos filtros Material y Coche redirigen al módulo correspondiente.
+
+Los detalles de trayectos usan `#c/{communityId}/rides/{postId}`. El detalle común
+reconoce el tipo y normaliza las direcciones antiguas, así como el enlace de vuelta,
+la retirada y las acciones. Servicios permanecen como publicaciones del Tablón,
+con contacto privado. Las pruebas web comprueban las entradas únicas, ausencia de
+filtros de Tablón, paginación, búsqueda y direcciones de trayectos.

@@ -72,6 +72,10 @@ internal static class PlatformScenarios
         await Post<CommunityDto>(stranger,"api/communities/join",new JoinRequest(strangerInvite.Code));
         await Expect(await stranger.PostAsJsonAsync("api/reports",new ReportRequest(Guid.NewGuid(),community.Id,"Message",message.Id,"Intento de acceso al chat ajeno")),HttpStatusCode.NotFound);
         var content=await platform.GetStringAsync(root+"/content");Check(!content.Contains("Mensaje privado")&&!content.Contains("Mensaje denunciado"),"El panel filtra mensajes privados");
+        var clothing=await Post<DonationDto>(owner,$"api/communities/{community.Id}/donations",new DonationInput(Guid.NewGuid(),"Lote de ropa revisable","Winter","M","Good","Adult",3,"Prueba de moderación",null));
+        Check((await platform.GetStringAsync(root+"/content")).Contains("Lote de ropa revisable"),"El panel no muestra las donaciones.");
+        await Expect(await platform.PostAsJsonAsync(root+$"/content/Donation/{clothing.Id}/remove",new{state="Withdrawn",reason="Retirada de ropa de prueba"}),HttpStatusCode.NoContent);
+        Check((await owner.GetFromJsonAsync<DonationDetail>($"api/communities/{community.Id}/donations/{clothing.Id}"))!.Donation.State=="Withdrawn","No retira la ropa desde plataforma.");
         await Expect(await platform.GetAsync(messagePath),HttpStatusCode.Unauthorized);
         await Expect(await platform.PostAsJsonAsync(root+$"/content/Message/{message.Id}/remove",new{state="Withdrawn",reason="No permitido"}),HttpStatusCode.BadRequest);
         var memberPath=root+"/users/"+users[1].Account.Id+"/state";
